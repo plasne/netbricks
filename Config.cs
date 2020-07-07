@@ -202,7 +202,7 @@ namespace NetBricks
         /// variables, resolving in key vault, converting to the specified datatype, and storing
         /// in a variable.
         /// </summary>
-        public async Task<T> GetSecret<T>(string key, Func<string, T> convert = null)
+        public async Task<T> GetSecret<T>(string key, Func<string, T> convert = null, bool ignore404 = false)
         {
 
             // ensure this is string or has a convert method
@@ -218,7 +218,7 @@ namespace NetBricks
             var str = System.Environment.GetEnvironmentVariable(key);
 
             // get from key vault
-            str = await GetFromKeyVault(str);
+            str = await GetFromKeyVault(str, ignore404);
 
             // IMPORTANT: all Get methods should ensure empty strings are returned as null to support ??
             // EXCEPTION: it is possible that the convert() might do something different

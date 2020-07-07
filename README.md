@@ -1,12 +1,12 @@
-# Why NetBricks?
+# NetBricks
 
 I found myself using a lot of the same code and techniques from project-to-project, however, I was always copying the code and then it would deviate. I decided instead to take the best components from all my recent solutions and put the base level components into something I am calling NetBricks.
 
 Included:
 
--   Config
--   AccessTokenFetcher
--   SingleLineConsoleLogger
+- Config
+- AccessTokenFetcher
+- SingleLineConsoleLogger
 
 ## Services
 
@@ -23,12 +23,12 @@ services.AddConfig();
 
 This is a flexible and efficient configuration management solution that supports the following features:
 
--   values can be pulled from environment variables
--   values can be pulled from Azure App Configuration
--   values that are URLs can be resolved to secrets in Azure Key Vault
--   values can be cached
--   values can be converted to the appropriate datatype
--   defaults can be set
+- values can be pulled from environment variables
+- values can be pulled from Azure App Configuration
+- values that are URLs can be resolved to secrets in Azure Key Vault
+- values can be cached
+- values can be converted to the appropriate datatype
+- defaults can be set
 
 ### GetOnce()
 

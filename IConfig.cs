@@ -30,7 +30,7 @@ namespace NetBricks
 
         bool Optional(string key, bool hideValue = false, bool hideIfEmpty = false);
 
-        Task<T> GetSecret<T>(string key, Func<string, T> convert = null);
+        Task<T> GetSecret<T>(string key, Func<string, T> convert = null, bool ignore404 = false);
 
         T Get<T>(string key, Func<string, T> convert = null);
 
