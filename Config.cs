@@ -298,6 +298,11 @@ namespace NetBricks
             this.Cache.TryAdd(key, val);
         }
 
+        public void RemoveFromCache(string key)
+        {
+            this.Cache.TryRemove(key, out object val);
+        }
+
         private string HideIfAppropriate(string value, bool hideValue)
         {
             if (!hideValue) return value;
