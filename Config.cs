@@ -32,14 +32,14 @@ namespace NetBricks
 
         public Config(
             ILogger<Config> logger,
-            IAccessTokenFetcher accessTokenFetcher,
-            IHttpClientFactory httpClientFactory,
+            IAccessTokenFetcher accessTokenFetcher = null,
+            IHttpClientFactory httpClientFactory = null,
             IConfigProvider configProvider = null
         )
         {
             this.Logger = logger;
             this.AccessTokenFetcher = accessTokenFetcher;
-            this.HttpClient = httpClientFactory.CreateClient("netbricks");
+            if (httpClientFactory != null) this.HttpClient = httpClientFactory.CreateClient("netbricks");
             this.Cache = new ConcurrentDictionary<string, object>();
             this.ConfigProvider = configProvider ?? new EnvVarConfigProvider();
         }
@@ -74,6 +74,7 @@ namespace NetBricks
             Dictionary<string, string> kv = new Dictionary<string, string>();
             if (string.IsNullOrEmpty(AppConfig)) return kv;
             if (filters == null || filters.Length < 1) return kv;
+            if (this.AccessTokenFetcher == null || this.HttpClient == null) return kv;
 
             // get an accessToken
             string accessToken = await AccessTokenFetcher.GetAccessToken($"https://{AppConfig}", "CONFIG");
@@ -152,7 +153,9 @@ namespace NetBricks
             if (
                 !string.IsNullOrEmpty(posurl) &&
                 posurl.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase) &&
-                posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase)
+                posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase) &&
+                this.AccessTokenFetcher != null &&
+                this.HttpClient != null
             )
             {
 
@@ -323,7 +326,7 @@ namespace NetBricks
             else
             {
                 string val = HideIfAppropriate(value, hideValue);
-                this.Logger.LogDebug($"{key} = \"{val}\"");
+                this.Logger.LogInformation($"{key} = \"{val}\"");
             }
         }
 
@@ -337,7 +340,7 @@ namespace NetBricks
             else
             {
                 string val = HideIfAppropriate(string.Join(", ", values), hideValue);
-                this.Logger.LogDebug($"{key} = \"{val}\"");
+                this.Logger.LogInformation($"{key} = \"{val}\"");
             }
         }
 
@@ -351,13 +354,13 @@ namespace NetBricks
         {
             if (string.IsNullOrEmpty(value))
             {
-                if (!hideIfEmpty) this.Logger.LogDebug($"{key} is \"(not-set)\".");
+                if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
                 return false;
             }
             else
             {
                 string val = HideIfAppropriate(value, hideValue);
-                this.Logger.LogDebug($"{key} = \"{val}\"");
+                this.Logger.LogInformation($"{key} = \"{val}\"");
                 return true;
             }
         }
@@ -366,13 +369,13 @@ namespace NetBricks
         {
             if (values == null || values.Count(v => v.Trim().Length > 0) < 1)
             {
-                if (!hideIfEmpty) this.Logger.LogDebug($"{key} is \"(not-set)\".");
+                if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
                 return false;
             }
             else
             {
                 string val = HideIfAppropriate(string.Join(", ", values), hideValue);
-                this.Logger.LogDebug($"{key} = \"{val}\"");
+                this.Logger.LogInformation($"{key} = \"{val}\"");
                 return true;
             }
         }
@@ -380,7 +383,7 @@ namespace NetBricks
         public bool Optional(string key, bool value, bool hideValue = false, bool hideIfEmpty = false)
         {
             string val = HideIfAppropriate(value.ToString(), hideValue);
-            this.Logger.LogDebug($"{key} = \"{val}\"");
+            this.Logger.LogInformation($"{key} = \"{val}\"");
             return true;
         }
 
@@ -389,13 +392,13 @@ namespace NetBricks
             string value = this.ConfigProvider.Get(key);
             if (string.IsNullOrEmpty(value))
             {
-                if (!hideIfEmpty) this.Logger.LogDebug($"{key} is \"(not-set)\".");
+                if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
                 return false;
             }
             else
             {
                 string val = HideIfAppropriate(value, hideValue);
-                this.Logger.LogDebug($"{key} = \"{val}\"");
+                this.Logger.LogInformation($"{key} = \"{val}\"");
                 return true;
             }
         }
