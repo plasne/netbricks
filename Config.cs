@@ -33,18 +33,21 @@ namespace NetBricks
         public Config(
             ILogger<Config> logger,
             IAccessTokenFetcher accessTokenFetcher,
-            IHttpClientFactory httpClientFactory
+            IHttpClientFactory httpClientFactory,
+            IConfigProvider configProvider = null
         )
         {
             this.Logger = logger;
             this.AccessTokenFetcher = accessTokenFetcher;
             this.HttpClient = httpClientFactory.CreateClient("netbricks");
             this.Cache = new ConcurrentDictionary<string, object>();
+            this.ConfigProvider = configProvider ?? new EnvVarConfigProvider();
         }
 
         private ILogger<Config> Logger { get; }
         private IAccessTokenFetcher AccessTokenFetcher { get; }
         private HttpClient HttpClient { get; }
+        private IConfigProvider ConfigProvider { get; }
         private ConcurrentDictionary<string, object> Cache { get; }
 
         private class AppConfigItems
@@ -215,7 +218,7 @@ namespace NetBricks
             if (GetFromCache<T>(key, out T val)) return val;
 
             // get from environment variable
-            var str = System.Environment.GetEnvironmentVariable(key);
+            var str = this.ConfigProvider.Get(key);
 
             // get from key vault
             str = await GetFromKeyVault(str, ignore404);
@@ -257,7 +260,7 @@ namespace NetBricks
             if (GetFromCache<T>(key, out T val)) return val;
 
             // get from environment variable
-            var str = System.Environment.GetEnvironmentVariable(key);
+            var str = this.ConfigProvider.Get(key);
 
             // IMPORTANT: all Get methods should ensure empty strings are returned as null to support ??
             // EXCEPTION: it is possible that the convert() might do something different
@@ -340,7 +343,7 @@ namespace NetBricks
 
         public void Require(string key, bool hideValue = false)
         {
-            string value = System.Environment.GetEnvironmentVariable(key);
+            string value = this.ConfigProvider.Get(key);
             Require(key, value, hideValue);
         }
 
@@ -383,7 +386,7 @@ namespace NetBricks
 
         public bool Optional(string key, bool hideValue = false, bool hideIfEmpty = false)
         {
-            string value = System.Environment.GetEnvironmentVariable(key);
+            string value = this.ConfigProvider.Get(key);
             if (string.IsNullOrEmpty(value))
             {
                 if (!hideIfEmpty) this.Logger.LogDebug($"{key} is \"(not-set)\".");

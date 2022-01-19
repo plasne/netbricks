@@ -694,6 +694,37 @@ namespace NetBricks.Test
 
         }
 
+        [Fact]
+        public void TestConfigProvider()
+        {
+
+            // configure services
+            var builder = new HostBuilder().ConfigureServices((hostContext, services) =>
+            {
+                services.AddSingleLineConsoleLogger(logParams: false);
+                services.AddAccessTokenFetcher();
+                services.AddHttpClient("netbricks");
+                services.AddSingleton<IConfigProvider>(_ =>
+                {
+                    var provider = new DictConfigProvider();
+                    provider.Add("MY_KEY_vbvb", "MY_VALUE");
+                    return provider;
+                });
+                services.AddConfig();
+            }).UseConsoleLifetime();
+            var host = builder.Build();
+
+            // get config
+            var config = host.Services.GetService<IConfig>();
+
+            // ensure the ConfigProvider was used
+            string val = config.Get<string>("MY_KEY_vbvb");
+            Assert.Equal("MY_VALUE", val);
+            string noval = config.Get<string>("MY_KEY");
+            Assert.Null(noval);
+
+        }
+
         public void Dispose()
         {
             this.Host.Dispose();
