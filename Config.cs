@@ -344,6 +344,16 @@ namespace NetBricks
             }
         }
 
+        public void Require(string key, bool value, bool hideValue = false)
+        {
+            Require(key, value.ToString(), hideValue);
+        }
+
+        public void Require(string key, int value, bool hideValue = false)
+        {
+            Require(key, value.ToString(), hideValue);
+        }
+
         public void Require(string key, bool hideValue = false)
         {
             string value = this.ConfigProvider.Get(key);
@@ -381,6 +391,13 @@ namespace NetBricks
         }
 
         public bool Optional(string key, bool value, bool hideValue = false, bool hideIfEmpty = false)
+        {
+            string val = HideIfAppropriate(value.ToString(), hideValue);
+            this.Logger.LogInformation($"{key} = \"{val}\"");
+            return true;
+        }
+
+        public bool Optional(string key, int value, bool hideValue = false, bool hideIfEmpty = false)
         {
             string val = HideIfAppropriate(value.ToString(), hideValue);
             this.Logger.LogInformation($"{key} = \"{val}\"");
@@ -507,10 +524,6 @@ namespace NetBricks
             return val;
 
         }
-
-
-
-
     }
 
 

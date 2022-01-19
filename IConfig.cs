@@ -20,6 +20,10 @@ namespace NetBricks
 
         void Require(string key, string[] values, bool hideValue = false);
 
+        void Require(string key, bool value, bool hideValue = false);
+
+        void Require(string key, int value, bool hideValue = false);
+
         void Require(string key, bool hideValue = false);
 
         bool Optional(string key, string value, bool hideValue = false, bool hideIfEmpty = false);
@@ -27,6 +31,8 @@ namespace NetBricks
         bool Optional(string key, string[] values, bool hideValue = false, bool hideIfEmpty = false);
 
         bool Optional(string key, bool value, bool hideValue = false, bool hideIfEmpty = false);
+
+        bool Optional(string key, int value, bool hideValue = false, bool hideIfEmpty = false);
 
         bool Optional(string key, bool hideValue = false, bool hideIfEmpty = false);
 
