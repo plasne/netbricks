@@ -37,18 +37,18 @@ namespace NetBricks
         public AccessTokenFetcher(
             ILogger<AccessTokenFetcher> logger,
             IHttpClientFactory httpClientFactory,
-            IServiceProvider serviceProvider
+            IConfig config
         )
         {
             this.Logger = logger;
             this.HttpClient = httpClientFactory.CreateClient("netbricks");
-            this.ServiceProvider = serviceProvider;
+            this.Config = config;
             this.AccessTokens = new ConcurrentDictionary<string, string>();
         }
 
         private ILogger<AccessTokenFetcher> Logger { get; }
         private HttpClient HttpClient { get; }
-        private IServiceProvider ServiceProvider { get; }
+        private IConfig Config { get; }
         private ConcurrentDictionary<string, string> AccessTokens { get; }
 
         private async Task<string> GetAccessTokenViaAzureServiceTokenProvider(string resourceId)
@@ -100,10 +100,9 @@ namespace NetBricks
             {
 
                 // get the creds
-                var config = ServiceProvider.GetService<IConfig>();
-                var tenant = config.TenantId(type);
-                var client = config.ClientId(type);
-                var secret = await config.ClientSecret(type);
+                var tenant = this.Config.TenantId(type);
+                var client = this.Config.ClientId(type);
+                var secret = await this.Config.ClientSecret(type);
 
                 // builder
                 var app = ConfidentialClientApplicationBuilder
@@ -126,6 +125,35 @@ namespace NetBricks
             }
         }
 
+        public async Task<string> GetAccessTokenOnce(string resourceId, string type = null)
+        {
+
+            // get by type
+            var authType = this.Config.AuthType(type);
+            switch (authType)
+            {
+                case AuthTypes.Service:
+                    {
+                        var token = await this.GetAccessTokenViaServiceAccount(resourceId, type);
+                        return token;
+                    }
+                case AuthTypes.Token:
+                    {
+                        var token = await this.GetAccessTokenViaAzureServiceTokenProvider(resourceId);
+                        return token;
+                    }
+                case AuthTypes.ManagedIdentity:
+                    {
+                        var token = await this.GetAccessTokenViaManagedIdentityEndpoint(resourceId);
+                        return token;
+                    }
+            }
+
+            // throw exception
+            throw new Exception($"GetAccessToken: type \"{type}\" could not be processed.");
+
+        }
+
         public async Task<string> GetAccessToken(string resourceId, string type = null)
         {
 
@@ -133,35 +161,10 @@ namespace NetBricks
             string key = string.IsNullOrEmpty(type) ? "$DEFAULT" : type.ToUpper();
             if (AccessTokens.TryGetValue(key, out string cached)) return cached;
 
-            // get the config
-            var config = ServiceProvider.GetService<IConfig>();
-
-            // get by type
-            var authType = config.AuthType(type);
-            switch (authType)
-            {
-                case AuthTypes.Service:
-                    {
-                        var token = await this.GetAccessTokenViaServiceAccount(resourceId, type);
-                        AccessTokens.TryAdd(key, token);
-                        return token;
-                    }
-                case AuthTypes.Token:
-                    {
-                        var token = await this.GetAccessTokenViaAzureServiceTokenProvider(resourceId);
-                        AccessTokens.TryAdd(key, token);
-                        return token;
-                    }
-                case AuthTypes.ManagedIdentity:
-                    {
-                        var token = await this.GetAccessTokenViaManagedIdentityEndpoint(resourceId);
-                        AccessTokens.TryAdd(key, token);
-                        return token;
-                    }
-            }
-
-            // throw exception
-            throw new Exception($"GetAccessToken: type \"{type}\" could not be processed.");
+            // get it once and cache it
+            var token = await GetAccessTokenOnce(resourceId, type);
+            AccessTokens.TryAdd(key, token);
+            return token;
 
         }
 
