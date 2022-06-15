@@ -312,7 +312,7 @@ namespace NetBricks
         private string HideIfAppropriate(string value, bool hideValue)
         {
             if (!hideValue) return value;
-            if (value.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase)) return value;
+            if (value.StartsWith("https://") && value.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase)) return value;
             return "(set)";
         }
 
