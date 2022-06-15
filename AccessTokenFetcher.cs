@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Azure.Services.AppAuthentication;
@@ -37,19 +35,29 @@ namespace NetBricks
         public AccessTokenFetcher(
             ILogger<AccessTokenFetcher> logger,
             IHttpClientFactory httpClientFactory,
-            IConfig config
+            IServiceProvider serviceProvider
         )
         {
             this.Logger = logger;
             this.HttpClient = httpClientFactory.CreateClient("netbricks");
-            this.Config = config;
             this.AccessTokens = new ConcurrentDictionary<string, string>();
+            this.ServiceProvider = serviceProvider;
         }
 
         private ILogger<AccessTokenFetcher> Logger { get; }
         private HttpClient HttpClient { get; }
-        private IConfig Config { get; }
+        private IConfig config;
+        private IConfig Config
+        {
+            get
+            {
+                if (this.config != null) return this.config;
+                this.config = this.ServiceProvider.GetService<IConfig>();
+                return this.config;
+            }
+        }
         private ConcurrentDictionary<string, string> AccessTokens { get; }
+        private IServiceProvider ServiceProvider { get; }
 
         private async Task<string> GetAccessTokenViaAzureServiceTokenProvider(string resourceId)
         {
