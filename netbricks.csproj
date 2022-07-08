@@ -4,7 +4,7 @@
     <Title>NetBricks</Title>
     <RootNamespace>NetBricks</RootNamespace>
     <PackageId>NetBricks</PackageId>
-    <Version>1.6.2</Version>
+    <Version>1.7.0</Version>
     <Authors>Peter Lasne</Authors>
     <Company>Microsoft</Company>
     <PackageDescription>Commonly used tooling for dotnetcore, including configuration management, logging, etc.</PackageDescription>

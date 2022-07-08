@@ -725,6 +725,28 @@ namespace NetBricks.Test
 
         }
 
+        [Fact]
+        public void TestChain()
+        {
+
+            // setup
+            System.Environment.SetEnvironmentVariable("MY_KEY_irrn", "value1");
+            System.Environment.SetEnvironmentVariable("MY_KEY_iiir", "value2");
+
+            // test that first is used
+            var v0 = Config.Get<string>("MY_KEY_irrn, MY_KEY_iiir");
+            Assert.Equal("value1", v0);
+
+            // test that second is used
+            var v1 = Config.Get<string>("MY_KEY_not1, MY_KEY_iiir");
+            Assert.Equal("value2", v1);
+
+            // test that none are used
+            var v2 = Config.Get<string>("MY_KEY_not1, MY_KEY_not2");
+            Assert.Null(v2);
+
+        }
+
         public void Dispose()
         {
             this.Host.Dispose();

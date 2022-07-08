@@ -41,7 +41,7 @@ namespace NetBricks
             this.AccessTokenFetcher = accessTokenFetcher;
             if (httpClientFactory != null) this.HttpClient = httpClientFactory.CreateClient("netbricks");
             this.Cache = new ConcurrentDictionary<string, object>();
-            this.ConfigProvider = configProvider ?? new EnvVarConfigProvider();
+            this.ConfigProvider = configProvider ?? new EnvVarChainConfigProvider();
         }
 
         private ILogger<Config> Logger { get; }
