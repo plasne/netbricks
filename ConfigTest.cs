@@ -747,6 +747,17 @@ namespace NetBricks.Test
 
         }
 
+        [Fact]
+        public void TestOptionalArray()
+        {
+
+            var v0 = Config.Get<string>("MY_KEY_foor").AsArray(() => new string[] { null });
+            Config.Optional("MY_KEY_foor", v0);
+
+            // asset no error
+
+        }
+
         public void Dispose()
         {
             this.Host.Dispose();

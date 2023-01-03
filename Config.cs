@@ -377,7 +377,7 @@ namespace NetBricks
 
         public bool Optional(string key, string[] values, bool hideValue = false, bool hideIfEmpty = false)
         {
-            if (values == null || values.Count(v => v.Trim().Length > 0) < 1)
+            if (values == null || values.Count(v => !string.IsNullOrWhiteSpace(v)) < 1)
             {
                 if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
                 return false;
