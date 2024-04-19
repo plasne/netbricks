@@ -31,20 +31,17 @@ namespace NetBricks
     {
 
         public Config(
-            ILogger<Config> logger,
             IAccessTokenFetcher accessTokenFetcher = null,
             IHttpClientFactory httpClientFactory = null,
             IConfigProvider configProvider = null
         )
         {
-            this.Logger = logger;
             this.AccessTokenFetcher = accessTokenFetcher;
             if (httpClientFactory != null) this.HttpClient = httpClientFactory.CreateClient("netbricks");
             this.Cache = new ConcurrentDictionary<string, object>();
             this.ConfigProvider = configProvider ?? new EnvVarChainConfigProvider();
         }
 
-        private ILogger<Config> Logger { get; }
         private IAccessTokenFetcher AccessTokenFetcher { get; }
         private HttpClient HttpClient { get; }
         private IConfigProvider ConfigProvider { get; }
@@ -84,45 +81,41 @@ namespace NetBricks
             {
 
                 // make authenticated calls to Azure AppConfig
-                using (var request = new HttpRequestMessage()
+                using var request = new HttpRequestMessage()
                 {
                     RequestUri = new Uri($"https://{AppConfig}/kv?key={filter}"),
                     Method = HttpMethod.Get
-                })
+                };
+                request.Headers.Add("Authorization", $"Bearer {accessToken}");
+                using (var response = await this.HttpClient.SendAsync(request))
                 {
-                    request.Headers.Add("Authorization", $"Bearer {accessToken}");
-                    using (var response = await this.HttpClient.SendAsync(request))
+
+                    // evaluate the response
+                    var raw = await response.Content.ReadAsStringAsync();
+                    if ((int)response.StatusCode == 401 || (int)response.StatusCode == 403)
                     {
+                        throw new Exception($"Load: The identity is not authorized to get key/value pairs from the AppConfig \"{AppConfig}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");
+                    }
+                    else if (!response.IsSuccessStatusCode)
+                    {
+                        throw new Exception($"Load: HTTP {(int)response.StatusCode} - {raw}");
+                    }
 
-                        // evaluate the response
-                        var raw = await response.Content.ReadAsStringAsync();
-                        if ((int)response.StatusCode == 401 || (int)response.StatusCode == 403)
+                    // look for key/value pairs
+                    var json = JsonConvert.DeserializeObject<AppConfigItems>(raw);
+                    foreach (var item in json.items)
+                    {
+                        var key = useFullyQualifiedName ? item.key : item.key.Split(":").Last();
+                        key = key.ToUpper();
+                        var val = item.value;
+                        if (item.content_type != null && item.content_type.Contains("vnd.microsoft.appconfig.keyvaultref", StringComparison.InvariantCultureIgnoreCase))
                         {
-                            throw new Exception($"Load: The identity is not authorized to get key/value pairs from the AppConfig \"{AppConfig}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");
+                            val = JsonConvert.DeserializeObject<KeyVaultRef>(item.value).uri;
                         }
-                        else if (!response.IsSuccessStatusCode)
-                        {
-                            throw new Exception($"Load: HTTP {(int)response.StatusCode} - {raw}");
-                        }
+                        if (!kv.ContainsKey(key)) kv.Add(key, val);
+                    }
 
-                        // look for key/value pairs
-                        var json = JsonConvert.DeserializeObject<AppConfigItems>(raw);
-                        foreach (var item in json.items)
-                        {
-                            Logger.LogDebug($"Config.Load: loaded \"{item.key}\" = \"{item.value}\".");
-                            var key = (useFullyQualifiedName) ? item.key : item.key.Split(":").Last();
-                            key = key.ToUpper();
-                            var val = item.value;
-                            if (item.content_type != null && item.content_type.Contains("vnd.microsoft.appconfig.keyvaultref", StringComparison.InvariantCultureIgnoreCase))
-                            {
-                                val = JsonConvert.DeserializeObject<KeyVaultRef>(item.value).uri;
-                            }
-                            if (!kv.ContainsKey(key)) kv.Add(key, val);
-                        }
-
-                    };
-
-                }
+                };
             }
 
             return kv;
@@ -132,7 +125,7 @@ namespace NetBricks
         {
 
             // load the config
-            if (filters == null) filters = ConfigKeys;
+            filters ??= ConfigKeys;
             Dictionary<string, string> kv = await Load(filters);
 
             // apply the config
@@ -170,20 +163,18 @@ namespace NetBricks
                 })
                 {
                     request.Headers.Add("Authorization", $"Bearer {accessToken}");
-                    using (var response = await this.HttpClient.SendAsync(request))
+                    using var response = await this.HttpClient.SendAsync(request);
+                    var raw = await response.Content.ReadAsStringAsync();
+                    if (ignore404 && (int)response.StatusCode == 404) // Not Found
                     {
-                        var raw = await response.Content.ReadAsStringAsync();
-                        if (ignore404 && (int)response.StatusCode == 404) // Not Found
-                        {
-                            return string.Empty;
-                        }
-                        else if (!response.IsSuccessStatusCode)
-                        {
-                            throw new Exception($"Config.GetFromKeyVault: HTTP {(int)response.StatusCode} - {raw}");
-                        }
-                        var item = JsonConvert.DeserializeObject<KeyVaultItem>(raw);
-                        return item.value;
+                        return string.Empty;
                     }
+                    else if (!response.IsSuccessStatusCode)
+                    {
+                        throw new Exception($"Config.GetFromKeyVault: HTTP {(int)response.StatusCode} - {raw}");
+                    }
+                    var item = JsonConvert.DeserializeObject<KeyVaultItem>(raw);
+                    return item.value;
                 };
 
             }
@@ -294,7 +285,7 @@ namespace NetBricks
             }
             else
             {
-                val = default(T);
+                val = default;
                 return false;
             }
         }
@@ -306,7 +297,7 @@ namespace NetBricks
 
         public void RemoveFromCache(string key)
         {
-            this.Cache.TryRemove(key, out object val);
+            this.Cache.TryRemove(key, out object _);
         }
 
         private string HideIfAppropriate(string value, bool hideValue)
@@ -320,13 +311,13 @@ namespace NetBricks
         {
             if (string.IsNullOrEmpty(value))
             {
-                this.Logger.LogError($"{key} is REQUIRED but missing.");
+                Console.WriteLine($"{key} is REQUIRED but missing.");
                 throw new Exception($"{key} is REQUIRED but missing.");
             }
             else
             {
                 string val = HideIfAppropriate(value, hideValue);
-                this.Logger.LogInformation($"{key} = \"{val}\"");
+                Console.WriteLine($"{key} = \"{val}\"");
             }
         }
 
@@ -334,13 +325,13 @@ namespace NetBricks
         {
             if (values.Count(v => v.Trim().Length > 0) < 1)
             {
-                this.Logger.LogError($"{key} is REQUIRED but missing.");
+                Console.WriteLine($"{key} is REQUIRED but missing.");
                 throw new Exception($"{key} is REQUIRED but missing.");
             }
             else
             {
                 string val = HideIfAppropriate(string.Join(", ", values), hideValue);
-                this.Logger.LogInformation($"{key} = \"{val}\"");
+                Console.WriteLine($"{key} = \"{val}\"");
             }
         }
 
@@ -364,13 +355,13 @@ namespace NetBricks
         {
             if (string.IsNullOrEmpty(value))
             {
-                if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
+                if (!hideIfEmpty) Console.WriteLine($"{key} is \"(not-set)\".");
                 return false;
             }
             else
             {
                 string val = HideIfAppropriate(value, hideValue);
-                this.Logger.LogInformation($"{key} = \"{val}\"");
+                Console.WriteLine($"{key} = \"{val}\"");
                 return true;
             }
         }
@@ -379,13 +370,13 @@ namespace NetBricks
         {
             if (values == null || values.Count(v => !string.IsNullOrWhiteSpace(v)) < 1)
             {
-                if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
+                if (!hideIfEmpty) Console.WriteLine($"{key} is \"(not-set)\".");
                 return false;
             }
             else
             {
                 string val = HideIfAppropriate(string.Join(", ", values), hideValue);
-                this.Logger.LogInformation($"{key} = \"{val}\"");
+                Console.WriteLine($"{key} = \"{val}\"");
                 return true;
             }
         }
@@ -393,14 +384,14 @@ namespace NetBricks
         public bool Optional(string key, bool value, bool hideValue = false, bool hideIfEmpty = false)
         {
             string val = HideIfAppropriate(value.ToString(), hideValue);
-            this.Logger.LogInformation($"{key} = \"{val}\"");
+            Console.WriteLine($"{key} = \"{val}\"");
             return true;
         }
 
         public bool Optional(string key, int value, bool hideValue = false, bool hideIfEmpty = false)
         {
             string val = HideIfAppropriate(value.ToString(), hideValue);
-            this.Logger.LogInformation($"{key} = \"{val}\"");
+            Console.WriteLine($"{key} = \"{val}\"");
             return true;
         }
 
@@ -409,13 +400,13 @@ namespace NetBricks
             string value = this.ConfigProvider.Get(key);
             if (string.IsNullOrEmpty(value))
             {
-                if (!hideIfEmpty) this.Logger.LogInformation($"{key} is \"(not-set)\".");
+                if (!hideIfEmpty) Console.WriteLine($"{key} is \"(not-set)\".");
                 return false;
             }
             else
             {
                 string val = HideIfAppropriate(value, hideValue);
-                this.Logger.LogInformation($"{key} = \"{val}\"");
+                Console.WriteLine($"{key} = \"{val}\"");
                 return true;
             }
         }
