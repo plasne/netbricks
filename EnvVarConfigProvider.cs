@@ -1,10 +1,9 @@
-namespace NetBricks
+namespace NetBricks;
+
+public class EnvVarConfigProvider : IConfigProvider
 {
-    public class EnvVarConfigProvider : IConfigProvider
+    public string Get(string key)
     {
-        public string Get(string key)
-        {
-            return System.Environment.GetEnvironmentVariable(key);
-        }
+        return System.Environment.GetEnvironmentVariable(key);
     }
 }

@@ -1,11 +1,6 @@
-namespace NetBricks
+namespace NetBricks;
+
+public interface IConfigProvider
 {
-
-    public interface IConfigProvider
-    {
-
-        string Get(string key);
-
-    }
-
+    string Get(string key);
 }
