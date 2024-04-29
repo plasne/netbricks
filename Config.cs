@@ -100,7 +100,7 @@ public class Config : IConfig, IDisposable
         if (filters == null || filters.Length < 1) return kv;
 
         // get an access token
-        var tokenRequestContext = new TokenRequestContext([$"https://{APPCONFIG_URL}"]);
+        var tokenRequestContext = new TokenRequestContext([$"{APPCONFIG_URL}/.default"]);
         var tokenResponse = await this.defaultAzureCredential.GetTokenAsync(tokenRequestContext);
         var accessToken = tokenResponse.Token;
 
@@ -110,7 +110,7 @@ public class Config : IConfig, IDisposable
             // make authenticated calls to Azure AppConfig
             using var request = new HttpRequestMessage()
             {
-                RequestUri = new Uri($"https://{APPCONFIG_URL}/kv?key={filter}"),
+                RequestUri = new Uri($"{APPCONFIG_URL}/kv?key={filter}"),
                 Method = HttpMethod.Get
             };
             request.Headers.Add("Authorization", $"Bearer {accessToken}");
@@ -139,7 +139,7 @@ public class Config : IConfig, IDisposable
                     {
                         val = JsonConvert.DeserializeObject<KeyVaultRef>(item.value).uri;
                     }
-                    if (!kv.ContainsKey(key)) kv.Add(key, val);
+                    kv.TryAdd(key, val);
                 }
             };
         }
@@ -149,6 +149,10 @@ public class Config : IConfig, IDisposable
 
     public async Task Apply(string[] filters = null)
     {
+        // show configuration
+        Console.WriteLine($"APPCONFIG_URL = \"{APPCONFIG_URL}\"");
+        Console.WriteLine($"CONFIG_KEYS = \"{string.Join(", ", CONFIG_KEYS)}\"");
+
         // load the config
         filters ??= CONFIG_KEYS;
         Dictionary<string, string> kv = await Load(filters);
@@ -158,6 +162,9 @@ public class Config : IConfig, IDisposable
         {
             Environment.SetEnvironmentVariable(pair.Key, pair.Value);
         }
+
+        // log
+        Console.WriteLine($"LOADED KEYS: {string.Join(", ", kv.Keys)}");
     }
 
     private class KeyVaultItem
@@ -172,7 +179,7 @@ public class Config : IConfig, IDisposable
             posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase))
         {
             // get an access token
-            var tokenRequestContext = new TokenRequestContext([$"https://vault.azure.net"]);
+            var tokenRequestContext = new TokenRequestContext([$"https://vault.azure.net/.default"]);
             var tokenResponse = await this.defaultAzureCredential.GetTokenAsync(tokenRequestContext);
             var accessToken = tokenResponse.Token;
 
@@ -444,11 +451,12 @@ public class Config : IConfig, IDisposable
     {
         get
         {
-            var val = GetOnce("APPCONFIG");
+            var val = GetOnce("APPCONFIG", "APPCONFIG_URL");
             if (!string.IsNullOrEmpty(val))
             {
                 val = val.ToLower();
                 if (!val.Contains(".azconfig.io")) val += ".azconfig.io";
+                if (!val.StartsWith("https://")) val = "https://" + val;
             }
             return val;
         }
