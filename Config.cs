@@ -150,8 +150,11 @@ public class Config : IConfig, IDisposable
     public async Task Apply(string[] filters = null)
     {
         // show configuration
-        Console.WriteLine($"APPCONFIG_URL = \"{APPCONFIG_URL}\"");
-        Console.WriteLine($"CONFIG_KEYS = \"{string.Join(", ", CONFIG_KEYS)}\"");
+        if (!string.IsNullOrEmpty(APPCONFIG_URL))
+            Console.WriteLine($"APPCONFIG_URL = \"{APPCONFIG_URL}\"");
+
+        if (CONFIG_KEYS is not null && CONFIG_KEYS.Length > 0)
+            Console.WriteLine($"CONFIG_KEYS = \"{string.Join(", ", CONFIG_KEYS)}\"");
 
         // load the config
         filters ??= CONFIG_KEYS;
