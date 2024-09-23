@@ -225,11 +225,6 @@ public class Config : IConfig, IDisposable
         return null;
     }
 
-    /// <summary>
-    /// The GetSecret() method supports pulling from cache, getting the value from the environment
-    /// variables, resolving in key vault, converting to the specified datatype, and storing
-    /// in a variable.
-    /// </summary>
     public async Task<T> GetSecret<T>(string key, Func<string, T> convert = null, bool ignore404 = false)
     {
         // ensure this is string or has a convert method
@@ -267,10 +262,6 @@ public class Config : IConfig, IDisposable
         return val;
     }
 
-    /// <summary>
-    /// This Get() method supports pulling from cache, getting the value from the environment
-    /// variables, converting to the specified datatype, and storing in a variable.
-    /// </summary>
     public T Get<T>(string key, Func<string, T> convert = null)
     {
         // ensure this is string or has a convert method
