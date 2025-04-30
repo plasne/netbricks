@@ -30,15 +30,15 @@ public class ConfigTest : IDisposable
     private IConfig Config { get; }
 
     [Fact]
-    public async void TestManual()
+    public async Task TestManual()
     {
 
         // manual get-cache, get-env, get-vault, set-cache
         Func<string, Task<string>> f1 = async key =>
         {
-            if (Config.GetFromCache<string>(key, out string val)) return val;
+            if (Config.TryGetFromCache<string>(key, out string val)) return val;
             val = NetBricks.Config.GetOnce(key) ?? "my-default";
-            val = await Config.GetFromKeyVault(val);
+            val = await Config.GetFromKeyVaultAsync(val);
             Config.AddToCache<string>(key, val);
             return val;
         };
@@ -104,11 +104,11 @@ public class ConfigTest : IDisposable
     }
 
     [Fact]
-    public async void TestGetSecretString()
+    public async Task TestGetSecretString()
     {
 
         // default
-        string v0 = await Config.GetSecret<string>("MY_KEY_bbie", str =>
+        string v0 = await Config.GetSecretAsync<string>("MY_KEY_bbie", str =>
         {
             if (string.IsNullOrEmpty(str)) return "my-default";
             return str;
@@ -116,17 +116,17 @@ public class ConfigTest : IDisposable
         Assert.Equal("my-default", v0);
 
         // still default based on cache
-        string v1 = await Config.GetSecret<string>("MY_KEY_bbie");
+        string v1 = await Config.GetSecretAsync<string>("MY_KEY_bbie");
         Assert.Equal("my-default", v1);
 
         // set by env
         System.Environment.SetEnvironmentVariable("MY_KEY_rirj", "my-original-value");
-        string v2 = await Config.GetSecret<string>("MY_KEY_rirj");
+        string v2 = await Config.GetSecretAsync<string>("MY_KEY_rirj");
         Assert.Equal("my-original-value", v2);
 
         // still pulling from cache
         System.Environment.SetEnvironmentVariable("MY_KEY_rirj", "my-changed-value");
-        string v3 = await Config.GetSecret<string>("MY_KEY_rirj");
+        string v3 = await Config.GetSecretAsync<string>("MY_KEY_rirj");
         Assert.Equal("my-original-value", v3);
 
     }
@@ -140,7 +140,7 @@ public class ConfigTest : IDisposable
         Assert.Null(v0);
 
         // verify it was in cache as null
-        bool wasInCache = Config.GetFromCache("MY_KEY_fhfh", out string v1);
+        bool wasInCache = Config.TryGetFromCache("MY_KEY_fhfh", out string v1);
         Assert.True(wasInCache);
         Assert.Null(v1);
 
@@ -171,7 +171,7 @@ public class ConfigTest : IDisposable
 
         // GetSecret()
         System.Environment.SetEnvironmentVariable("MY_KEY_ueye", "");
-        string v1 = await Config.GetSecret<string>("MY_KEY_ueye");
+        string v1 = await Config.GetSecretAsync<string>("MY_KEY_ueye");
         Assert.Null(v1);
 
         // Get()
@@ -190,7 +190,7 @@ public class ConfigTest : IDisposable
         Assert.Null(v0);
 
         // verify it was stored as null
-        bool wasInCache = Config.GetFromCache("MY_KEY_ejhh", out string[] v1);
+        bool wasInCache = Config.TryGetFromCache("MY_KEY_ejhh", out string[] v1);
         Assert.True(wasInCache);
         Assert.Null(v1);
 
@@ -261,17 +261,17 @@ public class ConfigTest : IDisposable
     {
 
         // default
-        int v0 = await Config.GetSecret<int>("MY_KEY_vgvg", str => str.AsInt(() => -1));
+        int v0 = await Config.GetSecretAsync<int>("MY_KEY_vgvg", str => str.AsInt(() => -1));
         Assert.Equal(-1, v0);
 
         // set legit value
         System.Environment.SetEnvironmentVariable("MY_KEY_wueh", "100");
-        int v1 = await Config.GetSecret<int>("MY_KEY_wueh", str => str.AsInt(() => -1));
+        int v1 = await Config.GetSecretAsync<int>("MY_KEY_wueh", str => str.AsInt(() => -1));
         Assert.Equal(100, v1);
 
         // set bad value
         System.Environment.SetEnvironmentVariable("MY_KEY_swie", "non-int");
-        int v2 = await Config.GetSecret<int>("MY_KEY_swie", str => str.AsInt(() => -2));
+        int v2 = await Config.GetSecretAsync<int>("MY_KEY_swie", str => str.AsInt(() => -2));
         Assert.Equal(-2, v2);
 
     }
@@ -325,21 +325,21 @@ public class ConfigTest : IDisposable
     {
 
         // default
-        bool v0 = await Config.GetSecret<bool>("MY_KEY_jhgc", str => str.AsBool(() => false));
+        bool v0 = await Config.GetSecretAsync<bool>("MY_KEY_jhgc", str => str.AsBool(() => false));
         Assert.False(v0);
 
         // set legit value
         System.Environment.SetEnvironmentVariable("MY_KEY_iiur", "true");
-        bool v1 = await Config.GetSecret<bool>("MY_KEY_iiur", str => str.AsBool(() => false));
+        bool v1 = await Config.GetSecretAsync<bool>("MY_KEY_iiur", str => str.AsBool(() => false));
         Assert.True(v1);
 
         // set bad value
         System.Environment.SetEnvironmentVariable("MY_KEY_oiue", "non-bool");
-        bool v2 = await Config.GetSecret<bool>("MY_KEY_oiue", str => str.AsBool(() => false));
+        bool v2 = await Config.GetSecretAsync<bool>("MY_KEY_oiue", str => str.AsBool(() => false));
         Assert.False(v2);
 
         // test default of true
-        bool v3 = await Config.GetSecret<bool>("MY_KEY_juyf", str => str.AsBool(() => true));
+        bool v3 = await Config.GetSecretAsync<bool>("MY_KEY_juyf", str => str.AsBool(() => true));
         Assert.True(v3);
 
     }
@@ -477,18 +477,18 @@ public class ConfigTest : IDisposable
     {
 
         // default
-        string[] v0 = await Config.GetSecret<string[]>("MY_KEY_fjeu", str => str.AsArray(() => null));
+        string[] v0 = await Config.GetSecretAsync<string[]>("MY_KEY_fjeu", str => str.AsArray(() => null));
         Assert.Null(v0);
 
         // set legit value
         System.Environment.SetEnvironmentVariable("MY_KEY_fjey", "value1, value2");
-        string[] v1 = await Config.GetSecret<string[]>("MY_KEY_fjey", str => str.AsArray(() => null));
+        string[] v1 = await Config.GetSecretAsync<string[]>("MY_KEY_fjey", str => str.AsArray(() => null));
         Assert.Equal(2, v1.Length);
         Assert.Equal("value1", v1[0]);
         Assert.Equal("value2", v1[1]);
 
         // verify cache
-        bool wasInCache = Config.GetFromCache<string[]>("MY_KEY_fjey", out string[] v2);
+        bool wasInCache = Config.TryGetFromCache<string[]>("MY_KEY_fjey", out string[] v2);
         Assert.True(wasInCache);
         Assert.Equal(2, v2.Length);
         Assert.Equal("value1", v2[0]);
@@ -496,7 +496,7 @@ public class ConfigTest : IDisposable
 
         // set bad value
         System.Environment.SetEnvironmentVariable("MY_KEY_uucs", "");
-        string[] v3 = await Config.GetSecret<string[]>("MY_KEY_uucs", str => str.AsArray(() => null));
+        string[] v3 = await Config.GetSecretAsync<string[]>("MY_KEY_uucs", str => str.AsArray(() => null));
         Assert.Null(v3);
 
     }
@@ -517,7 +517,7 @@ public class ConfigTest : IDisposable
         Assert.Equal("value2", v1[1]);
 
         // verify cache
-        bool wasInCache = Config.GetFromCache<string[]>("MY_KEY_zdjf", out string[] v2);
+        bool wasInCache = Config.TryGetFromCache<string[]>("MY_KEY_zdjf", out string[] v2);
         Assert.True(wasInCache);
         Assert.Equal(2, v2.Length);
         Assert.Equal("value1", v2[0]);
@@ -597,17 +597,17 @@ public class ConfigTest : IDisposable
     {
 
         // default
-        TestEnum v0 = await Config.GetSecret<TestEnum>("MY_KEY_eury", str => str.AsEnum<TestEnum>(() => TestEnum.Unknown));
+        TestEnum v0 = await Config.GetSecretAsync<TestEnum>("MY_KEY_eury", str => str.AsEnum<TestEnum>(() => TestEnum.Unknown));
         Assert.Equal(TestEnum.Unknown, v0);
 
         // set legit value
         System.Environment.SetEnvironmentVariable("MY_KEY_riti", "Value1");
-        TestEnum v1 = await Config.GetSecret<TestEnum>("MY_KEY_riti", str => str.AsEnum<TestEnum>(() => TestEnum.Unknown));
+        TestEnum v1 = await Config.GetSecretAsync<TestEnum>("MY_KEY_riti", str => str.AsEnum<TestEnum>(() => TestEnum.Unknown));
         Assert.Equal(TestEnum.Value1, v1);
 
         // set bad value
         System.Environment.SetEnvironmentVariable("MY_KEY_ruru", "Snowman");
-        TestEnum v2 = await Config.GetSecret<TestEnum>("MY_KEY_ruru", str => str.AsEnum<TestEnum>(() => TestEnum.Unknown));
+        TestEnum v2 = await Config.GetSecretAsync<TestEnum>("MY_KEY_ruru", str => str.AsEnum<TestEnum>(() => TestEnum.Unknown));
         Assert.Equal(TestEnum.Unknown, v2);
 
     }
@@ -746,7 +746,7 @@ public class ConfigTest : IDisposable
     {
 
         var v0 = Config.Get<string>("MY_KEY_foor").AsArray(() => new string[] { null });
-        Config.Optional("MY_KEY_foor", v0);
+        NetBricks.Config.Optional("MY_KEY_foor", v0);
 
         // asset no error
 

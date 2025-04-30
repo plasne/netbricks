@@ -5,46 +5,37 @@ using System.Threading.Tasks;
 using System.Net.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; // System.Text.Json was not deserializing properly
+using Microsoft.Extensions.Http;
 using System.Collections.Concurrent;
 using Azure.Identity;
 using Azure.Core;
+using Microsoft.Identity.Client;
+using System.Threading;
 
 namespace NetBricks;
 
 public class Config : IConfig, IDisposable
 {
-    private readonly DefaultAzureCredential defaultAzureCredential;
-    private HttpClient httpClient;
-    private readonly ConcurrentDictionary<string, object> cache = new();
     private readonly IConfigProvider configProvider;
+    private readonly DefaultAzureCredential defaultAzureCredential;
+    private readonly IHttpClientFactory httpClientFactory;
+    private readonly Lazy<HttpClient> httpClient;
+    private readonly ConcurrentDictionary<string, object> cache = new();
     private bool disposed = false;
 
-    public Config(IConfigProvider configProvider = null)
+    public Config(
+        IConfigProvider configProvider = null,
+        DefaultAzureCredential defaultAzureCredential = null,
+        IHttpClientFactory httpClientFactory = null)
     {
         this.configProvider = configProvider ?? new EnvVarChainConfigProvider();
+        this.defaultAzureCredential = defaultAzureCredential;
+        this.httpClientFactory = httpClientFactory;
 
-        // get the list of credential options
-        string[] include = (INCLUDE_CREDENTIAL_TYPES.Length > 0)
-            ? INCLUDE_CREDENTIAL_TYPES :
-            string.Equals(ASPNETCORE_ENVIRONMENT, "Development", StringComparison.InvariantCultureIgnoreCase)
-                ? ["azcli", "env"]
-                : ["env", "mi"];
-
-        // log
-        Console.WriteLine($"INCLUDE_CREDENTIAL_TYPES = \"{string.Join(", ", include)}\"");
-
-        // build the credential object
-        this.defaultAzureCredential = new DefaultAzureCredential(
-            new DefaultAzureCredentialOptions()
-            {
-                ExcludeEnvironmentCredential = !include.Contains("env"),
-                ExcludeManagedIdentityCredential = !include.Contains("mi"),
-                ExcludeSharedTokenCacheCredential = !include.Contains("token"),
-                ExcludeVisualStudioCredential = !include.Contains("vs"),
-                ExcludeVisualStudioCodeCredential = !include.Contains("vscode"),
-                ExcludeAzureCliCredential = !include.Contains("azcli"),
-                ExcludeInteractiveBrowserCredential = !include.Contains("browser"),
-            });
+        this.httpClient = new Lazy<HttpClient>(() =>
+        {
+            return this.httpClientFactory.CreateClient("netbricks");
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public DefaultAzureCredential DefaultAzureCredential => this.defaultAzureCredential;
@@ -62,7 +53,10 @@ public class Config : IConfig, IDisposable
             if (disposing)
             {
                 // Dispose managed resources.
-                this.httpClient?.Dispose();
+                if (this.httpClient.IsValueCreated)
+                {
+                    this.httpClient.Value.Dispose();
+                }
             }
 
             // Dispose unmanaged resources.
@@ -92,12 +86,23 @@ public class Config : IConfig, IDisposable
         public string uri = null;
     }
 
-    public async Task<Dictionary<string, string>> Load(string[] filters, bool useFullyQualifiedName = false)
+    public async Task<Dictionary<string, string>> LoadAsync(string[] filters, bool useFullyQualifiedName = false)
     {
-        // exit if there is nothing requested or no way to get it
+        // exit if there is nothing requested
         Dictionary<string, string> kv = [];
-        if (string.IsNullOrEmpty(APPCONFIG_URL)) return kv;
         if (filters == null || filters.Length < 1) return kv;
+
+        // check the requirements
+        if (this.httpClientFactory is null || this.defaultAzureCredential is null)
+        {
+            throw new Exception("Config.Load: call AddHttpClientForConfig and AddDefaultAzureCredential before calling Load().");
+        }
+
+        // make sure the URL is provided
+        if (string.IsNullOrEmpty(APPCONFIG_URL))
+        {
+            throw new Exception("Config.Load: set the APPCONFIG_URL environment variable to the URL of your Azure AppConfig instance.");
+        }
 
         // get an access token
         var tokenRequestContext = new TokenRequestContext([$"{APPCONFIG_URL}/.default"]);
@@ -114,18 +119,17 @@ public class Config : IConfig, IDisposable
                 Method = HttpMethod.Get
             };
             request.Headers.Add("Authorization", $"Bearer {accessToken}");
-            this.httpClient ??= new HttpClient();
-            using (var response = await this.httpClient.SendAsync(request))
+            using (var response = await this.httpClient.Value.SendAsync(request))
             {
                 // evaluate the response
                 var raw = await response.Content.ReadAsStringAsync();
                 if ((int)response.StatusCode == 401 || (int)response.StatusCode == 403)
                 {
-                    throw new Exception($"Load: The identity is not authorized to get key/value pairs from the AppConfig \"{APPCONFIG_URL}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");
+                    throw new Exception($"Config.Load: The identity is not authorized to get key/value pairs from the AppConfig \"{APPCONFIG_URL}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");
                 }
                 else if (!response.IsSuccessStatusCode)
                 {
-                    throw new Exception($"Load: HTTP {(int)response.StatusCode} - {raw}");
+                    throw new Exception($"Config.Load: HTTP {(int)response.StatusCode} - {raw}");
                 }
 
                 // look for key/value pairs
@@ -141,13 +145,14 @@ public class Config : IConfig, IDisposable
                     }
                     kv.TryAdd(key, val);
                 }
-            };
+            }
+            ;
         }
 
         return kv;
     }
 
-    public async Task Apply(string[] filters = null)
+    public async Task ApplyAsync(string[] filters = null)
     {
         // show configuration
         if (!string.IsNullOrEmpty(APPCONFIG_URL))
@@ -158,7 +163,7 @@ public class Config : IConfig, IDisposable
 
         // load the config
         filters ??= CONFIG_KEYS;
-        Dictionary<string, string> kv = await Load(filters);
+        Dictionary<string, string> kv = await LoadAsync(filters);
 
         // apply the config
         foreach (var pair in kv)
@@ -175,43 +180,47 @@ public class Config : IConfig, IDisposable
         public string value = null;
     }
 
-    public async Task<string> GetFromKeyVault(string posurl, bool ignore404 = false)
+    public async Task<string> GetFromKeyVaultAsync(string posurl, bool ignore404 = false)
     {
-        if (!string.IsNullOrEmpty(posurl) &&
-            posurl.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase) &&
-            posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase))
-        {
-            // get an access token
-            var tokenRequestContext = new TokenRequestContext([$"https://vault.azure.net/.default"]);
-            var tokenResponse = await this.defaultAzureCredential.GetTokenAsync(tokenRequestContext);
-            var accessToken = tokenResponse.Token;
-
-            // get from the keyvault
-            using (var request = new HttpRequestMessage()
-            {
-                RequestUri = new Uri($"{posurl}?api-version=7.0"),
-                Method = HttpMethod.Get
-            })
-            {
-                request.Headers.Add("Authorization", $"Bearer {accessToken}");
-                this.httpClient ??= new HttpClient();
-                using var response = await this.httpClient.SendAsync(request);
-                var raw = await response.Content.ReadAsStringAsync();
-                if (ignore404 && (int)response.StatusCode == 404) // Not Found
-                {
-                    return string.Empty;
-                }
-                else if (!response.IsSuccessStatusCode)
-                {
-                    throw new Exception($"Config.GetFromKeyVault: HTTP {(int)response.StatusCode} - {raw}");
-                }
-                var item = JsonConvert.DeserializeObject<KeyVaultItem>(raw);
-                return item.value;
-            };
-        }
-        else
+        // shortcut if the URL is empty or not a key vault URL
+        if (string.IsNullOrEmpty(posurl) ||
+            !posurl.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase) ||
+            !posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase))
         {
             return posurl;
+        }
+
+        // check the requirements
+        if (this.httpClientFactory is null || this.defaultAzureCredential is null)
+        {
+            throw new Exception("Config.GetFromKeyVault: call AddHttpClientForConfig and AddDefaultAzureCredential before calling Load().");
+        }
+
+        // get an access token
+        var tokenRequestContext = new TokenRequestContext([$"https://vault.azure.net/.default"]);
+        var tokenResponse = await this.defaultAzureCredential.GetTokenAsync(tokenRequestContext);
+        var accessToken = tokenResponse.Token;
+
+        // get from the keyvault
+        using (var request = new HttpRequestMessage()
+        {
+            RequestUri = new Uri($"{posurl}?api-version=7.0"),
+            Method = HttpMethod.Get
+        })
+        {
+            request.Headers.Add("Authorization", $"Bearer {accessToken}");
+            using var response = await this.httpClient.Value.SendAsync(request);
+            var raw = await response.Content.ReadAsStringAsync();
+            if (ignore404 && (int)response.StatusCode == 404) // Not Found
+            {
+                return string.Empty;
+            }
+            else if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Config.GetFromKeyVault: HTTP {(int)response.StatusCode} - {raw}");
+            }
+            var item = JsonConvert.DeserializeObject<KeyVaultItem>(raw);
+            return item.value;
         }
     }
 
@@ -225,22 +234,22 @@ public class Config : IConfig, IDisposable
         return null;
     }
 
-    public async Task<T> GetSecret<T>(string key, Func<string, T> convert = null, bool ignore404 = false)
+    public async Task<T> GetSecretAsync<T>(string key, Func<string, T> convert = null, bool ignore404 = false)
     {
         // ensure this is string or has a convert method
         if (typeof(T) != typeof(string) && convert == null)
         {
-            throw new Exception("Get<T>() cannot be used without convert except when the datatype is string.");
+            throw new Exception("Config.GetSecret<T>: cannot be used without convert except when the datatype is string.");
         }
 
         // get from cache
-        if (GetFromCache<T>(key, out T val)) return val;
+        if (TryGetFromCache<T>(key, out T val)) return val;
 
         // get from environment variable
         var str = this.configProvider.Get(key);
 
         // get from key vault
-        str = await GetFromKeyVault(str, ignore404);
+        str = await GetFromKeyVaultAsync(str, ignore404);
 
         // IMPORTANT: all Get methods should ensure empty strings are returned as null to support ??
         // EXCEPTION: it is possible that the convert() might do something different
@@ -260,6 +269,11 @@ public class Config : IConfig, IDisposable
         AddToCache<T>(key, val);
 
         return val;
+    }
+
+    public async Task<string> GetSecretAsync(string key, bool ignore404 = false)
+    {
+        return await GetSecretAsync<string>(key, null, ignore404);
     }
 
     public T Get<T>(string key, Func<string, T> convert = null)
@@ -267,11 +281,11 @@ public class Config : IConfig, IDisposable
         // ensure this is string or has a convert method
         if (typeof(T) != typeof(string) && convert == null)
         {
-            throw new ArgumentNullException("Get<T>() cannot be used without convert except when the datatype is string.");
+            throw new ArgumentNullException("Config.Get: cannot be used without convert except when the datatype is string.");
         }
 
         // get from cache
-        if (GetFromCache<T>(key, out T val)) return val;
+        if (TryGetFromCache<T>(key, out T val)) return val;
 
         // get from environment variable
         var str = this.configProvider.Get(key);
@@ -296,7 +310,12 @@ public class Config : IConfig, IDisposable
         return val;
     }
 
-    public bool GetFromCache<T>(string key, out T val)
+    public string Get(string key)
+    {
+        return Get<string>(key, null);
+    }
+
+    public bool TryGetFromCache<T>(string key, out T val)
     {
         if (this.cache.TryGetValue(key, out object obj))
         {
@@ -320,19 +339,30 @@ public class Config : IConfig, IDisposable
         this.cache.TryRemove(key, out object _);
     }
 
-    private string HideIfAppropriate(string value, bool hideValue)
+    private static string HideIfAppropriate(string value, bool hideValue)
     {
         if (!hideValue) return value;
         if (value.StartsWith("https://") && value.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase)) return value;
         return "(set)";
     }
 
-    public void Require(string key, string value, bool hideValue = false)
+    private static void PrintException(string message)
+    {
+        Console.WriteLine(message);
+        throw new Exception(message);
+    }
+
+    /// <summary>
+    /// Requires a configuration value to be set. If the value is not set, an exception is thrown.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <param name="hideValue">If true, the value is redacted (for instance, use this for passwords).</param>
+    public static void Require(string key, string value, bool hideValue = false)
     {
         if (string.IsNullOrEmpty(value))
         {
-            Console.WriteLine($"{key} is REQUIRED but missing.");
-            throw new Exception($"{key} is REQUIRED but missing.");
+            PrintException($"{key} is REQUIRED but missing.");
         }
         else
         {
@@ -341,12 +371,17 @@ public class Config : IConfig, IDisposable
         }
     }
 
-    public void Require(string key, string[] values, bool hideValue = false)
+    /// <summary>
+    /// Requires a configuration value to be set. If the value is not set, an exception is thrown.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <param name="hideValue">If true, the value is redacted (for instance, use this for passwords).</param>
+    public static void Require(string key, string[] values, bool hideValue = false)
     {
         if (!values.Any(v => v.Trim().Length > 0))
         {
-            Console.WriteLine($"{key} is REQUIRED but missing.");
-            throw new Exception($"{key} is REQUIRED but missing.");
+            PrintException($"{key} is REQUIRED but missing.");
         }
         else
         {
@@ -355,23 +390,75 @@ public class Config : IConfig, IDisposable
         }
     }
 
-    public void Require(string key, bool value, bool hideValue = false)
+    /// <summary>
+    /// Requires a configuration value to be set. If the value is not set, an exception is thrown.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    public static void Require(string key, int value)
     {
-        Require(key, value.ToString(), hideValue);
+        if (value == 0)
+        {
+            PrintException($"{key} is REQUIRED but is set to 0.");
+        }
+        else
+        {
+            Console.WriteLine($"{key} = \"{value}\"");
+        }
     }
 
-    public void Require(string key, int value, bool hideValue = false)
+    /// <summary>
+    /// Requires a configuration value to be set. If the value is not set, an exception is thrown.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <param name="min">The minimum value.</param>
+    /// <param name="max">The maximum value.</param>
+    public static void Require(string key, int value, int min = int.MinValue, int max = int.MaxValue)
     {
-        Require(key, value.ToString(), hideValue);
+        if (value < min)
+        {
+            PrintException($"{key} is REQUIRED but is less than the minimum of {min}.");
+        }
+        else if (value > max)
+        {
+            PrintException($"{key} is REQUIRED but is greater than the maximum of {max}.");
+        }
+        else
+        {
+            Console.WriteLine($"{key} = \"{value}\"");
+        }
     }
 
-    public void Require(string key, bool hideValue = false)
+    /// <summary>
+    /// Requires a configuration value to be set. If the value is not set, an exception is thrown.
+    /// </summary>
+    /// <typeparam name="T">The enum type of the value</typeparam>
+    /// <param name="key">The configuration key</param>
+    /// <param name="value">The enum value</param>
+    public static void Require<T>(string key, T value) where T : struct, Enum
     {
-        string value = this.configProvider.Get(key);
-        Require(key, value, hideValue);
+        if (Convert.ToInt32(value) == 0)
+        {
+            PrintException($"{key} is REQUIRED but is set to {value}.");
+        }
+        else
+        {
+            Console.WriteLine($"{key} = \"{value}\"");
+        }
     }
 
-    public bool Optional(string key, string value, bool hideValue = false, bool hideIfEmpty = false)
+    /// <summary>
+    /// Makes a configuration value optional.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <param name="hideValue">If true, the value is redacted (for instance, use this for passwords).</param>
+    /// <param name="hideIfEmpty">If true and the value is empty, the print line will be suppressed.</param>
+    /// <returns>
+    /// A boolean indicating whether the value is set.
+    /// </returns>
+    public static bool Optional(string key, string value, bool hideValue = false, bool hideIfEmpty = false)
     {
         if (string.IsNullOrEmpty(value))
         {
@@ -386,7 +473,17 @@ public class Config : IConfig, IDisposable
         }
     }
 
-    public bool Optional(string key, string[] values, bool hideValue = false, bool hideIfEmpty = false)
+    /// <summary>
+    /// Makes a configuration value optional.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <param name="hideValue">If true, the value is redacted (for instance, use this for passwords).</param>
+    /// <param name="hideIfEmpty">If true and the value is empty, the print line will be suppressed.</param>
+    /// <returns>
+    /// A boolean indicating whether the value is set.
+    /// </returns>
+    public static bool Optional(string key, string[] values, bool hideValue = false, bool hideIfEmpty = false)
     {
         if (values == null || values.Count(v => !string.IsNullOrWhiteSpace(v)) < 1)
         {
@@ -401,46 +498,70 @@ public class Config : IConfig, IDisposable
         }
     }
 
-    public bool Optional(string key, bool value, bool hideValue = false, bool hideIfEmpty = false)
+    /// <summary>
+    /// Makes a configuration value optional.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <returns>
+    /// A boolean indicating whether the value is set.
+    /// </returns>
+    public static bool Optional(string key, bool value)
     {
-        string val = HideIfAppropriate(value.ToString(), hideValue);
-        Console.WriteLine($"{key} = \"{val}\"");
+        Console.WriteLine($"{key} = \"{value}\"");
         return true;
     }
 
-    public bool Optional(string key, int value, bool hideValue = false, bool hideIfEmpty = false)
+    /// <summary>
+    /// Makes a configuration value optional.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <returns>
+    /// A boolean indicating whether the value is set.
+    /// </returns>
+    public static bool Optional(string key, int value)
     {
-        string val = HideIfAppropriate(value.ToString(), hideValue);
-        Console.WriteLine($"{key} = \"{val}\"");
-        return true;
+        Console.WriteLine($"{key} = \"{value}\"");
+        return value != 0;
     }
 
-    public bool Optional(string key, bool hideValue = false, bool hideIfEmpty = false)
+    /// <summary>
+    /// Makes a configuration value optional.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <returns>
+    /// A boolean indicating whether the value is set.
+    /// </returns>
+    public static bool Optional<T>(string key, T value) where T : struct, Enum
     {
-        string value = this.configProvider.Get(key);
-        if (string.IsNullOrEmpty(value))
-        {
-            if (!hideIfEmpty) Console.WriteLine($"{key} is \"(not-set)\".");
-            return false;
-        }
-        else
-        {
-            string val = HideIfAppropriate(value, hideValue);
-            Console.WriteLine($"{key} = \"{val}\"");
-            return true;
-        }
+        Console.WriteLine($"{key} = \"{value}\"");
+        return Convert.ToInt32(value) != 0;
     }
 
-    public static LogLevel LOG_LEVEL
+    /// <summary>
+    /// Get the value of the LOG_LEVEL environment variable.
+    /// </summary>
+    /// <returns>The value of the LOG_LEVEL environment variable.</returns>
+    public static Microsoft.Extensions.Logging.LogLevel LOG_LEVEL
     {
-        get => GetOnce("LOG_LEVEL").AsEnum<LogLevel>(() => LogLevel.Information);
+        get => GetOnce("LOG_LEVEL").AsEnum<Microsoft.Extensions.Logging.LogLevel>(() => Microsoft.Extensions.Logging.LogLevel.Information);
     }
 
+    /// <summary>
+    /// Get the value of the DISABLE_COLORS environment variable.
+    /// </summary>
+    /// <returns>The value of the DISABLE_COLORS environment variable.</returns>
     public static bool DISABLE_COLORS
     {
         get => GetOnce("DISABLE_COLORS").AsBool(() => false);
     }
 
+    /// <summary>
+    /// Get the value of the APPCONFIG or APPCONFIG_URL environment variable.
+    /// </summary>
+    /// <returns>The value of the APPCONFIG or APPCONFIG_URL environment variable.</returns>
     public static string APPCONFIG_URL
     {
         get
@@ -456,16 +577,28 @@ public class Config : IConfig, IDisposable
         }
     }
 
+    /// <summary>
+    /// Get the value of the CONFIG_KEYS environment variable.
+    /// </summary>
+    /// <returns>The value of the CONFIG_KEYS environment variable.</returns>
     public static string[] CONFIG_KEYS
     {
         get => GetOnce("CONFIG_KEYS").AsArray(() => null);
     }
 
+    /// <summary>
+    /// Get the value of the ASPNETCORE_ENVIRONMENT environment variable.
+    /// </summary>
+    /// <returns>The value of the ASPNETCORE_ENVIRONMENT environment variable.</returns>
     public static string ASPNETCORE_ENVIRONMENT
     {
         get => GetOnce("ASPNETCORE_ENVIRONMENT").AsString(() => "Development");
     }
 
+    /// <summary>
+    /// Get the value of the INCLUDE_CREDENTIAL_TYPES environment variable.
+    /// </summary>
+    /// <returns>The value of the INCLUDE_CREDENTIAL_TYPES environment variable.</returns>
     public static string[] INCLUDE_CREDENTIAL_TYPES
     {
         get => GetOnce("INCLUDE_CREDENTIAL_TYPES").AsArray(() => []);
