@@ -7,18 +7,25 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace NetBricks;
 
 public class SingleLineConsoleLoggerProvider : ILoggerProvider
 {
+    public SingleLineConsoleLoggerProvider(IOptions<SingleLineConsoleLoggerOptions> options)
+    {
+        this.SingleLineConsoleLoggerOptions = options.Value;
+    }
+
+    private SingleLineConsoleLoggerOptions SingleLineConsoleLoggerOptions { get; }
     private ConcurrentDictionary<string, SingleLineConsoleLogger> Loggers = new ConcurrentDictionary<string, SingleLineConsoleLogger>();
     private bool disposed;
     private readonly object disposeLock = new object();
 
     public ILogger CreateLogger(string categoryName)
     {
-        return Loggers.GetOrAdd(categoryName, name => new SingleLineConsoleLogger(name, Config.DISABLE_COLORS));
+        return Loggers.GetOrAdd(categoryName, name => new SingleLineConsoleLogger(name, SingleLineConsoleLoggerOptions));
     }
 
     protected virtual void Dispose(bool disposing)
@@ -52,10 +59,10 @@ public class SingleLineConsoleLoggerProvider : ILoggerProvider
 
 public class SingleLineConsoleLogger : ILogger, IDisposable
 {
-    public SingleLineConsoleLogger(string name, bool disableColors)
+    public SingleLineConsoleLogger(string name, SingleLineConsoleLoggerOptions options)
     {
         this.Name = name;
-        this.DisableColors = disableColors;
+        this.DisableColors = options.DISABLE_COLORS;
 
         // create an unbounded channel for the log messages
         LogChannel = System.Threading.Channels.Channel.CreateUnbounded<string>(new UnboundedChannelOptions
@@ -98,17 +105,12 @@ public class SingleLineConsoleLogger : ILogger, IDisposable
         return true;
     }, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    public IDisposable BeginScope<TState>(TState state)
-    {
-        return null;
-    }
-
     public bool IsEnabled(LogLevel logLevel)
     {
         return logLevel != LogLevel.None;
     }
 
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
         if (!IsEnabled(logLevel))
         {
@@ -201,15 +203,15 @@ public class SingleLineConsoleLogger : ILogger, IDisposable
 
     private readonly struct ConsoleColors
     {
-        public ConsoleColors(string foreground, string background)
+        public ConsoleColors(string? foreground, string? background)
         {
             Foreground = foreground;
             Background = background;
         }
 
-        public string Foreground { get; }
+        public string? Foreground { get; }
 
-        public string Background { get; }
+        public string? Background { get; }
     }
 
     protected virtual void Dispose(bool disposing)
@@ -241,5 +243,10 @@ public class SingleLineConsoleLogger : ILogger, IDisposable
     {
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+    {
+        throw new NotImplementedException();
     }
 }
