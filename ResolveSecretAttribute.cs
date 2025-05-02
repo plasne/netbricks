@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -8,13 +9,26 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 
 // TODO: consider supporting multiple calls to Key Vault at the same time
+// TODO: consider supporting types other than string
 
 namespace NetBricks;
 
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
 public class ResolveSecretAttribute : ValidationAttribute
 {
-    internal string? ErrorMessageRaisedDuringApply { get; set; }
+    private static readonly Dictionary<string, string> ErrorMessages = [];
+
+    internal static void SetError(Type type, string? propertyName, string errorMessage)
+    {
+        string key = $"{type.FullName}.{propertyName}";
+        ErrorMessages[key] = errorMessage;
+    }
+
+    internal static string? GetError(Type type, string? propertyName)
+    {
+        string key = $"{type.FullName}.{propertyName}";
+        return ErrorMessages.TryGetValue(key, out var message) ? message : null;
+    }
 
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
@@ -23,15 +37,10 @@ public class ResolveSecretAttribute : ValidationAttribute
             return new ValidationResult("ResolveSecret can only be applied to Strings.");
         }
 
-        if (!string.IsNullOrEmpty(this.ErrorMessageRaisedDuringApply))
+        string? error = GetError(validationContext.ObjectType, validationContext.MemberName);
+        if (!string.IsNullOrEmpty(error))
         {
-            return new ValidationResult(this.ErrorMessageRaisedDuringApply);
-        }
-
-        if (posurl.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase) &&
-            posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase))
-        {
-            return new ValidationResult("A secret was not found in the key vault.");
+            return new ValidationResult(error);
         }
 
         return ValidationResult.Success;
@@ -46,21 +55,19 @@ internal static class ResolveSecret
     }
 
     internal static async Task ApplyAsync<T>(
-        IConfiguration configuration,
         T instance,
         IHttpClientFactory? httpClientFactory = null,
         DefaultAzureCredential? defaultAzureCredential = null)
         where T : class
     {
-        if (configuration == null)
-            throw new ArgumentNullException(nameof(configuration));
         if (instance == null)
             throw new ArgumentNullException(nameof(instance));
 
+        // look for properties with the ResolveSecret attribute
         var properties = typeof(T).GetProperties();
         foreach (var property in properties)
         {
-            // Check if the property has the GetValue attribute
+            // check if the property has the ResolveSecret attribute
             var attribute = Attribute.GetCustomAttribute(property, typeof(ResolveSecretAttribute)) as ResolveSecretAttribute;
             if (attribute is null)
                 continue;
@@ -68,14 +75,12 @@ internal static class ResolveSecret
             // only process strings
             var value = property.GetValue(instance);
             if (value is not string posurl)
-            {
                 continue;
-            }
 
             // shortcut if the URL is empty or not a key vault URL
             if (string.IsNullOrEmpty(posurl) ||
-                !posurl.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase) ||
-                !posurl.Contains(".vault.azure.net/", StringComparison.InvariantCultureIgnoreCase))
+                !posurl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                !posurl.Contains(".vault.azure.net/", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -83,7 +88,8 @@ internal static class ResolveSecret
             // check the requirements
             if (httpClientFactory is null || defaultAzureCredential is null)
             {
-                attribute.ErrorMessageRaisedDuringApply = "HttpClientFactory and DefaultAzureCredential must be provided.";
+                ResolveSecretAttribute.SetError(typeof(T), property.Name, "HttpClientFactory and DefaultAzureCredential must be provided.");
+                continue;
             }
 
             // get an access token
@@ -94,7 +100,7 @@ internal static class ResolveSecret
             // create the HTTP client
             using var httpClient = httpClientFactory!.CreateClient("netbricks");
 
-            // get from the keyvault
+            // get from the Key Vault
             using (var request = new HttpRequestMessage()
             {
                 RequestUri = new Uri($"{posurl}?api-version=7.0"),
@@ -106,7 +112,7 @@ internal static class ResolveSecret
                 var raw = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    attribute.ErrorMessageRaisedDuringApply = $"Key vault request failed: {response.StatusCode} - {raw}";
+                    ResolveSecretAttribute.SetError(typeof(T), property.Name, $"Key vault request failed: {response.StatusCode} - {raw}");
                     continue;
                 }
                 var item = JsonConvert.DeserializeObject<KeyVaultItem>(raw);

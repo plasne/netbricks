@@ -49,13 +49,13 @@ internal class AzureAppConfig
         // check the requirements
         if (this.httpClientFactory is null || this.defaultAzureCredential is null)
         {
-            throw new Exception("Config.Load: call AddHttpClientForConfig and AddDefaultAzureCredential before calling Load().");
+            throw new Exception("Call AddHttpClientForConfig and AddDefaultAzureCredential before calling LoadAsync().");
         }
 
         // make sure the URL is provided
         if (string.IsNullOrEmpty(this.options.APPCONFIG_URL))
         {
-            throw new Exception("Config.Load: set the APPCONFIG_URL environment variable to the URL of your Azure AppConfig instance.");
+            throw new Exception("Set the APPCONFIG_URL environment variable to the URL of your Azure AppConfig instance.");
         }
 
         // get an access token
@@ -82,11 +82,11 @@ internal class AzureAppConfig
                 var raw = await response.Content.ReadAsStringAsync();
                 if ((int)response.StatusCode == 401 || (int)response.StatusCode == 403)
                 {
-                    throw new Exception($"Config.Load: The identity is not authorized to get key/value pairs from the AppConfig \"{this.options.APPCONFIG_URL}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");
+                    throw new Exception($"The identity is not authorized to get key/value pairs from the AppConfig \"{this.options.APPCONFIG_URL}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");
                 }
                 else if (!response.IsSuccessStatusCode)
                 {
-                    throw new Exception($"Config.Load: HTTP {(int)response.StatusCode} - {raw}");
+                    throw new Exception($"HTTP {(int)response.StatusCode} - {raw}");
                 }
 
                 // look for key/value pairs
@@ -100,7 +100,7 @@ internal class AzureAppConfig
                             : item.key.Split(":").Last();
                         key = key.ToUpper();
                         var val = item.value;
-                        if (item.content_type != null && item.content_type.Contains("vnd.microsoft.appconfig.keyvaultref", StringComparison.InvariantCultureIgnoreCase))
+                        if (item.content_type != null && item.content_type.Contains("vnd.microsoft.appconfig.keyvaultref", StringComparison.OrdinalIgnoreCase))
                         {
                             val = JsonConvert.DeserializeObject<KeyVaultRef>(item.value)?.uri;
                         }

@@ -247,6 +247,6 @@ public class SingleLineConsoleLogger : ILogger, IDisposable
 
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull
     {
-        throw new NotImplementedException();
+        return null;
     }
 }

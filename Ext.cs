@@ -21,8 +21,11 @@ namespace NetBricks;
 
 public static class Ext
 {
-    private static object configOptionsLock = new object();
-    private static bool hasConfigOptionsStartup = false;
+    public static IServiceCollection AddConfig<T>(this IServiceCollection services)
+        where T : class
+    {
+        return AddConfig<T, T>(services);
+    }
 
     public static IServiceCollection AddConfig<I, T>(this IServiceCollection services)
         where I : class
@@ -55,17 +58,27 @@ public static class Ext
             Console.WriteLine($"  APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS = \"{options.APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS}\"");
         });
 
-        // add the config as an option and validate it
+        // add the config object
         services.AddSingleton<I>(provider =>
         {
+            // TODO: is there a better way to handle these async calls?
+
             // load Azure App Config
             var azureAppConfig = provider.GetRequiredService<AzureAppConfig>();
             azureAppConfig.LoadAsync().GetAwaiter().GetResult();
-            var configuration = provider.GetRequiredService<IConfiguration>();
 
             // set the values on the config object
+            var configuration = provider.GetRequiredService<IConfiguration>();
             var instance = Activator.CreateInstance<T>();
             SetValue.Apply(configuration, instance);
+
+            // run any [SetValue] methods
+            SetValues.ApplyAsync(instance).GetAwaiter().GetResult();
+
+            // resolve the key vault secrets
+            var httpClientFactory = provider.GetService<IHttpClientFactory>();
+            var defaultAzureCredential = provider.GetService<DefaultAzureCredential>();
+            ResolveSecret.ApplyAsync(instance, httpClientFactory, defaultAzureCredential).GetAwaiter().GetResult();
 
             // write to console
             WriteToConsole.Apply(configuration, instance);
@@ -79,7 +92,7 @@ public static class Ext
                 {
                     Console.WriteLine(validationResult.ErrorMessage);
                 }
-                Environment.Exit(1);
+                Environment.Exit(1); // TODO: this probably needs to throw a custom exception
             }
 
             return instance;
@@ -109,7 +122,7 @@ public static class Ext
             var AZURE_CLIENT_ID = configuration.GetValue<string>("AZURE_CLIENT_ID");
             string[] include = (INCLUDE_CREDENTIAL_TYPES is not null && INCLUDE_CREDENTIAL_TYPES.Length > 0)
                 ? INCLUDE_CREDENTIAL_TYPES
-                : string.Equals(ASPNETCORE_ENVIRONMENT, "Development", StringComparison.InvariantCultureIgnoreCase)
+                : string.Equals(ASPNETCORE_ENVIRONMENT, "Development", StringComparison.OrdinalIgnoreCase)
                     ? ["azcli", "env"]
                     : ["env", "mi"];
 

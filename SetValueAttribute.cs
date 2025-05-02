@@ -130,6 +130,13 @@ internal static class SetValue
                         property.SetValue(instance, convertedValue);
                     }
                 }
+                else if (effectiveType == typeof(Guid))
+                {
+                    if (Guid.TryParse(value, out var convertedValue))
+                    {
+                        property.SetValue(instance, convertedValue);
+                    }
+                }
                 else if (effectiveType.IsEnum)
                 {
                     if (Enum.TryParse(effectiveType, value, ignoreCase: true, out var convertedValue))
