@@ -6,15 +6,32 @@ using Microsoft.Extensions.Configuration;
 
 namespace NetBricks;
 
+/// <summary>
+/// Attribute that specifies one or more configuration keys to try when setting a property value.
+/// This attribute enables automatic population of properties from configuration sources
+/// like environment variables, command line arguments, or configuration files.
+/// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
 public class SetValueAttribute : ValidationAttribute
 {
     private static readonly Dictionary<string, string> ErrorMessages = [];
 
+    /// <summary>
+    /// Gets the array of configuration keys to check for a value.
+    /// Keys are tried in order until a non-empty value is found.
+    /// </summary>
     public string[] Keys { get; }
 
+    /// <summary>
+    /// Gets or sets the default value to use if none of the keys have a value.
+    /// </summary>
     public object? Default { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SetValueAttribute"/> class with the specified keys.
+    /// </summary>
+    /// <param name="keys">The configuration keys to check for a value.</param>
+    /// <exception cref="ArgumentException">Thrown when no keys are provided.</exception>
     public SetValueAttribute(params string[] keys)
     {
         if (keys == null || keys.Length == 0)

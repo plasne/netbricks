@@ -6,9 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace NetBricks;
 
-public class LogConfigBackgroundService : BackgroundService
+public class OptionsStartup : IHostedService
 {
-    public LogConfigBackgroundService(
+    public OptionsStartup(
         IOptions<SingleLineConsoleLoggerOptions> singleLineConsoleLoggerOptions,
         IOptions<DefaultAzureCredentialOptions> defaultAzureCredentialOptions,
         IOptions<ConfigOptions> configOptions)
@@ -16,17 +16,23 @@ public class LogConfigBackgroundService : BackgroundService
         this.singleLineConsoleLoggerOptions = singleLineConsoleLoggerOptions;
         this.defaultAzureCredentialOptions = defaultAzureCredentialOptions;
         this.configOptions = configOptions;
+
     }
 
     private readonly IOptions<SingleLineConsoleLoggerOptions> singleLineConsoleLoggerOptions;
     private readonly IOptions<DefaultAzureCredentialOptions> defaultAzureCredentialOptions;
     private readonly IOptions<ConfigOptions> configOptions;
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         _ = this.singleLineConsoleLoggerOptions.Value;
         _ = this.defaultAzureCredentialOptions.Value;
         _ = this.configOptions.Value;
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
         return Task.CompletedTask;
     }
 }

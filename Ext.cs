@@ -12,6 +12,7 @@ using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -21,12 +22,33 @@ namespace NetBricks;
 
 public static class Ext
 {
+    /// <summary>
+    /// Adds a strongly-typed configuration object to the service collection.
+    /// This method registers the config class as both the interface and implementation.
+    /// </summary>
+    /// <typeparam name="T">The type of configuration class to register.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddConfig<T>(this IServiceCollection services)
         where T : class
     {
         return AddConfig<T, T>(services);
     }
 
+    /// <summary>
+    /// Adds a strongly-typed configuration object to the service collection with support for interface/implementation separation.
+    /// This method configures Azure App Configuration integration, validation, and value resolution from various sources.
+    /// The configuration object supports:
+    /// - Loading values from Azure App Configuration
+    /// - Custom value setting via [SetValue] and [SetValues] attributes
+    /// - Resolving secrets from Key Vault references
+    /// - Data validation via validation attributes
+    /// - Console output of configuration values via [WriteToConsole] attributes
+    /// </summary>
+    /// <typeparam name="I">The interface type to register.</typeparam>
+    /// <typeparam name="T">The implementation type to instantiate and configure.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddConfig<I, T>(this IServiceCollection services)
         where I : class
         where T : class, I
@@ -59,50 +81,18 @@ public static class Ext
         });
 
         // add the config object
-        services.AddSingleton<I>(provider =>
-        {
-            // TODO: is there a better way to handle these async calls?
-
-            // load Azure App Config
-            var azureAppConfig = provider.GetRequiredService<AzureAppConfig>();
-            azureAppConfig.LoadAsync().GetAwaiter().GetResult();
-
-            // set the values on the config object
-            var configuration = provider.GetRequiredService<IConfiguration>();
-            var instance = Activator.CreateInstance<T>();
-            SetValue.Apply(configuration, instance);
-
-            // run any [SetValue] methods
-            SetValues.ApplyAsync(instance).GetAwaiter().GetResult();
-
-            // resolve the key vault secrets
-            var httpClientFactory = provider.GetService<IHttpClientFactory>();
-            var defaultAzureCredential = provider.GetService<DefaultAzureCredential>();
-            ResolveSecret.ApplyAsync(instance, httpClientFactory, defaultAzureCredential).GetAwaiter().GetResult();
-
-            // write to console
-            WriteToConsole.Apply(configuration, instance);
-
-            // validate
-            var validationContext = new ValidationContext(instance, provider, null);
-            var validationResults = new List<ValidationResult>();
-            if (!Validator.TryValidateObject(instance, validationContext, validationResults, true))
-            {
-                foreach (var validationResult in validationResults)
-                {
-                    Console.WriteLine(validationResult.ErrorMessage);
-                }
-                Environment.Exit(1); // TODO: this probably needs to throw a custom exception
-            }
-
-            return instance;
-        });
+        services.AddSingleton<IConfigFactory<I>, ConfigFactory<I, T>>();
 
         // add AzureAppConfig as a service
         services.TryAddSingleton<AzureAppConfig>();
 
-        // add the background service to show configurations
-        services.AddHostedService<LogConfigBackgroundService>();
+        // add the startup services
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, OptionsStartup>());
+        services.AddHostedService<ConfigStartup<I>>(provider =>
+        {
+            var configFactory = provider.GetRequiredService<IConfigFactory<I>>();
+            return new ConfigStartup<I>(configFactory);
+        });
 
         return services;
     }
@@ -156,8 +146,8 @@ public static class Ext
             return new DefaultAzureCredential(options);
         });
 
-        // add the background service to show configurations
-        services.AddHostedService<LogConfigBackgroundService>();
+        // add the startup services
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, OptionsStartup>());
 
         return services;
     }
@@ -199,8 +189,8 @@ public static class Ext
                 services.TryAddSingleton<ILoggerProvider, SingleLineConsoleLoggerProvider>();
             });
 
-        // add the background service to show configurations
-        services.AddHostedService<LogConfigBackgroundService>();
+        // add the startup services
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, OptionsStartup>());
 
         return services;
     }

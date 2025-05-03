@@ -7,11 +7,30 @@ using Microsoft.Extensions.Configuration;
 
 namespace NetBricks;
 
+/// <summary>
+/// Attribute that marks a method to be called during the configuration setup process.
+/// This attribute enables defining custom setup logic via methods that will be
+/// automatically executed as part of the configuration initialization.
+/// </summary>
+/// <remarks>
+/// Methods marked with this attribute:
+/// - Must be instance methods of the configuration class
+/// - Can be void or return Task (for async operations)
+/// - Will be called in the order specified by the Order property
+/// - Should not have parameters
+/// </remarks>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
 public class SetValuesAttribute : Attribute
 {
+    /// <summary>
+    /// Gets the execution order of the method. Methods with lower order values are executed first.
+    /// </summary>
     public int Order { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SetValuesAttribute"/> class with the specified execution order.
+    /// </summary>
+    /// <param name="order">The execution order. Default is 0.</param>
     public SetValuesAttribute(int order = 0)
     {
         Order = order;

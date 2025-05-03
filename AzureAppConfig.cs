@@ -11,7 +11,7 @@ using Newtonsoft.Json;
 
 namespace NetBricks;
 
-internal class AzureAppConfig
+public class AzureAppConfig
 {
     public AzureAppConfig(IOptions<ConfigOptions> options, IHttpClientFactory? httpClientFactory = null, DefaultAzureCredential? defaultAzureCredential = null)
     {
