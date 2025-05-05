@@ -13,6 +13,7 @@ public interface IConfigFactory<I>
     /// <summary>
     /// Gets the configuration object, creating and configuring it if necessary.
     /// </summary>
+    /// <param name="cancellationToken">A cancellation token to cancel the operation</param>
     /// <returns>A configured instance of the configuration object</returns>
     Task<I> GetAsync(CancellationToken cancellationToken = default);
 }

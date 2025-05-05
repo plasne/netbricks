@@ -2,13 +2,14 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace NetBricks;
 
 /// <summary>
 /// Controls when property values are written to the console
 /// </summary>
-public enum WriteToConsoleMode
+public enum LogConfigMode
 {
     /// <summary>
     /// Never write the property value to the console
@@ -32,49 +33,44 @@ public enum WriteToConsoleMode
 }
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Property, AllowMultiple = false)]
-public class WriteToConsoleAttribute : Attribute
+public class LogConfigAttribute : Attribute
 {
     public string? Header { get; set; }
-    public WriteToConsoleMode Mode { get; set; } = WriteToConsoleMode.Always;
+    public LogConfigMode Mode { get; set; } = LogConfigMode.Always;
 
-    public WriteToConsoleAttribute(string? header = null, WriteToConsoleMode mode = WriteToConsoleMode.Always)
+    public LogConfigAttribute(string? header = null, LogConfigMode mode = LogConfigMode.Always)
     {
         this.Header = header;
         this.Mode = mode;
     }
 }
 
-internal static class WriteToConsole
+internal static class LogConfig
 {
-    internal static void Apply<T>(IConfiguration configuration, T instance) where T : class
+    internal static void Apply<T>(IConfiguration configuration, T instance, ILogger? logger) where T : class
     {
         if (configuration == null)
             throw new ArgumentNullException(nameof(configuration));
         if (instance == null)
             throw new ArgumentNullException(nameof(instance));
 
-        string indentation = string.Empty;
-        var classAttribute = Attribute.GetCustomAttribute(typeof(T), typeof(WriteToConsoleAttribute)) as WriteToConsoleAttribute;
-        if (classAttribute is not null && !string.IsNullOrEmpty(classAttribute.Header))
+        var classAttribute = Attribute.GetCustomAttribute(typeof(T), typeof(LogConfigAttribute)) as LogConfigAttribute;
+        if (classAttribute is not null && !string.IsNullOrEmpty(classAttribute.Header) && logger is null)
         {
             Console.WriteLine(classAttribute.Header);
-            indentation = "  ";
         }
 
         var properties = typeof(T).GetProperties();
         foreach (var property in properties)
         {
             // Check if the property has the WriteToConsole attribute
-            var propertyAttribute = Attribute.GetCustomAttribute(property, typeof(WriteToConsoleAttribute)) as WriteToConsoleAttribute;
+            var propertyAttribute = Attribute.GetCustomAttribute(property, typeof(LogConfigAttribute)) as LogConfigAttribute;
 
             // Determine which mode to use (property attribute takes precedence over class attribute)
-            WriteToConsoleMode mode = WriteToConsoleMode.Always;
-            string? headerPrefix = indentation;
-
+            LogConfigMode mode = LogConfigMode.Always;
             if (propertyAttribute is not null)
             {
                 mode = propertyAttribute.Mode;
-                headerPrefix = propertyAttribute.Header ?? indentation;
             }
             else if (classAttribute is not null)
             {
@@ -82,7 +78,7 @@ internal static class WriteToConsole
             }
 
             // If mode is Never, skip this property
-            if (mode == WriteToConsoleMode.Never)
+            if (mode == LogConfigMode.Never)
                 continue;
 
             // Get the target type
@@ -95,19 +91,41 @@ internal static class WriteToConsole
             var stringValue = AsString(effectiveType, value);
 
             // Check if we should skip empty values
-            if (mode == WriteToConsoleMode.IfNotEmpty && string.IsNullOrEmpty(stringValue))
+            if (mode == LogConfigMode.IfNotEmpty && string.IsNullOrEmpty(stringValue))
                 continue;
 
-            // Write to the console based on the mode
-            if (mode == WriteToConsoleMode.Masked)
+            // Get the prefix and apply mask
+            var prefix = Prefix(logger, classAttribute?.Header, propertyAttribute?.Header);
+            if (mode == LogConfigMode.Masked) stringValue = "**MASKED**";
+
+            // Log the value
+            if (logger is not null)
             {
-                Console.WriteLine($"{headerPrefix}{property.Name} = \"**MASKED**\"");
+                logger.LogInformation($"{prefix}{property.Name} = \"{stringValue}\"");
             }
             else
             {
-                Console.WriteLine($"{headerPrefix}{property.Name} = \"{stringValue}\"");
+                Console.WriteLine($"{prefix}{property.Name} = \"{stringValue}\"");
             }
         }
+    }
+
+    internal static string? Prefix(ILogger? logger, string? classHeader, string? propertyHeader)
+    {
+        if (logger is not null)
+        {
+            if (!string.IsNullOrEmpty(propertyHeader))
+                return propertyHeader;
+            if (!string.IsNullOrEmpty(classHeader))
+                return classHeader;
+        }
+
+        if (!string.IsNullOrEmpty(propertyHeader))
+            return propertyHeader;
+        if (!string.IsNullOrEmpty(classHeader))
+            return "  ";
+
+        return string.Empty;
     }
 
     internal static string? AsString(Type? type, object? value)

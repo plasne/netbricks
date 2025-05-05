@@ -8,12 +8,14 @@ namespace NetBricks;
 public class ConfigStartup<I> : IHostedService
     where I : class
 {
-    public ConfigStartup(IConfigFactory<I> configFactory)
+    public ConfigStartup(IConfigFactory<I> configFactory, LogMethod logMethod)
     {
         this.configFactory = configFactory;
+        this.logMethod = logMethod;
     }
 
     private readonly IConfigFactory<I> configFactory;
+    private readonly LogMethod logMethod;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
