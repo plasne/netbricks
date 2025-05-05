@@ -15,49 +15,56 @@ public class ConfigFactory<I, T> : IConfigFactory<I>
 {
     public ConfigFactory(
         IServiceProvider provider,
-        AzureAppConfig azureAppConfig,
         IConfiguration configuration,
+        AzureAppConfigOptions? azureAppConfigOptions = null,
         IHttpClientFactory? httpClientFactory = null,
         DefaultAzureCredential? defaultAzureCredential = null)
     {
         this.provider = provider;
-        this.azureAppConfig = azureAppConfig;
         this.configuration = configuration;
+        this.azureAppConfigOptions = azureAppConfigOptions;
         this.httpClientFactory = httpClientFactory;
         this.defaultAzureCredential = defaultAzureCredential;
     }
 
     private readonly IServiceProvider provider;
-    private readonly AzureAppConfig azureAppConfig;
     private readonly IConfiguration configuration;
+    private readonly AzureAppConfigOptions? azureAppConfigOptions;
     private readonly IHttpClientFactory? httpClientFactory;
     private readonly DefaultAzureCredential? defaultAzureCredential;
     private readonly SemaphoreSlim getLock = new(1, 1);
     private T? config;
 
-    public async Task<I> GetAsync()
+    public async Task<I> GetAsync(CancellationToken cancellationToken = default)
     {
         if (this.config is not null)
             return this.config;
 
-        await this.getLock.WaitAsync();
+        await this.getLock.WaitAsync(cancellationToken);
         try
         {
             if (this.config is not null)
                 return this.config;
 
-            // load Azure App Config
-            await azureAppConfig.LoadAsync();
+            // wait for the Azure AppConfig to load
+            if (this.azureAppConfigOptions is not null)
+            {
+                await Task.WhenAny(
+                    this.azureAppConfigOptions.WaitForLoad.Task,
+                    Task.Delay(Timeout.Infinite, cancellationToken)
+                ).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
 
             // set the values on the config object
             var instance = Activator.CreateInstance<T>();
             SetValue.Apply(configuration, instance);
 
             // run any [SetValues] methods
-            await SetValues.ApplyAsync(instance);
+            await SetValues.ApplyAsync(instance, cancellationToken);
 
             // resolve the key vault secrets
-            await ResolveSecret.ApplyAsync(instance, httpClientFactory, defaultAzureCredential);
+            await ResolveSecret.ApplyAsync(instance, httpClientFactory, defaultAzureCredential, cancellationToken);
 
             // write to console
             WriteToConsole.Apply(configuration, instance);

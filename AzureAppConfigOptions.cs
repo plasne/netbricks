@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace NetBricks;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace NetBricks;
 /// These settings control how keys are loaded from Azure App Configuration
 /// and how they are processed into environment variables.
 /// </summary>
-public class ConfigOptions
+public class AzureAppConfigOptions
 {
     /// <summary>
     /// The URL of the Azure App Configuration instance.
@@ -25,4 +27,11 @@ public class ConfigOptions
     /// Default is false.
     /// </summary>
     public bool APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS { get; set; }
+
+    /// <summary>
+    /// This TaskCompletionSource is used to signal when the Azure App Configuration has been loaded.
+    /// This ensures that the Config system doesn't do any work until the Azure App Configuration
+    /// has been loaded and the keys have been set.
+    /// </summary>
+    public TaskCompletionSource WaitForLoad { get; } = new TaskCompletionSource();
 }

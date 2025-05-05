@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NetBricks;
@@ -13,5 +14,5 @@ public interface IConfigFactory<I>
     /// Gets the configuration object, creating and configuring it if necessary.
     /// </summary>
     /// <returns>A configured instance of the configuration object</returns>
-    Task<I> GetAsync();
+    Task<I> GetAsync(CancellationToken cancellationToken = default);
 }

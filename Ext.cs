@@ -22,6 +22,50 @@ namespace NetBricks;
 
 public static class Ext
 {
+    public static IServiceCollection AddAzureAppConfig(this IServiceCollection services)
+    {
+        // add the config options
+        services.AddSingleton<AzureAppConfigOptions>(provider =>
+        {
+            var configuration = provider.GetRequiredService<IConfiguration>();
+            var options = new AzureAppConfigOptions();
+
+            // set APPCONFIG_URL
+            var APPCONFIG_URL = configuration.GetValue<string>("APPCONFIG")
+                ?? configuration.GetValue<string>("APPCONFIG_URL");
+            if (!string.IsNullOrEmpty(APPCONFIG_URL))
+            {
+                APPCONFIG_URL = APPCONFIG_URL.ToLower();
+                if (!APPCONFIG_URL.Contains(".azconfig.io")) APPCONFIG_URL += ".azconfig.io";
+                if (!APPCONFIG_URL.StartsWith("https://")) APPCONFIG_URL = "https://" + APPCONFIG_URL;
+            }
+            options.APPCONFIG_URL = APPCONFIG_URL;
+
+            // set APPCONFIG_KEYS
+            options.APPCONFIG_KEYS = configuration.GetValue<string>("APPCONFIG_KEYS").AsArray() ?? [];
+
+            // set APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS
+            options.APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS = configuration.GetValue<string>("APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS").AsBool() ?? false;
+
+            // log the parameters
+            Console.WriteLine("AzureAppConfigOptions:");
+            Console.WriteLine($"  APPCONFIG_URL = \"{options.APPCONFIG_URL}\"");
+            Console.WriteLine($"  APPCONFIG_KEYS = \"{string.Join(", ", options.APPCONFIG_KEYS)}\"");
+            Console.WriteLine($"  APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS = \"{options.APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS}\"");
+
+            return options;
+        });
+
+        // add AzureAppConfig as a service
+        services.TryAddSingleton<AzureAppConfig>();
+
+        // add the startup services
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, OptionsStartup>());
+        services.AddHostedService<AzureAppConfigStartup>();
+
+        return services;
+    }
+
     /// <summary>
     /// Adds a strongly-typed configuration object to the service collection.
     /// This method registers the config class as both the interface and implementation.
@@ -53,38 +97,8 @@ public static class Ext
         where I : class
         where T : class, I
     {
-        // add the config options
-        services.AddOptions<ConfigOptions>().Configure<IConfiguration, ILogger<AzureAppConfig>>((options, configuration, logger) =>
-        {
-            // set APPCONFIG_URL
-            var APPCONFIG_URL = configuration.GetValue<string>("APPCONFIG")
-                ?? configuration.GetValue<string>("APPCONFIG_URL");
-            if (!string.IsNullOrEmpty(APPCONFIG_URL))
-            {
-                APPCONFIG_URL = APPCONFIG_URL.ToLower();
-                if (!APPCONFIG_URL.Contains(".azconfig.io")) APPCONFIG_URL += ".azconfig.io";
-                if (!APPCONFIG_URL.StartsWith("https://")) APPCONFIG_URL = "https://" + APPCONFIG_URL;
-            }
-            options.APPCONFIG_URL = APPCONFIG_URL;
-
-            // set APPCONFIG_KEYS
-            options.APPCONFIG_KEYS = configuration.GetValue<string>("APPCONFIG_KEYS").AsArray() ?? [];
-
-            // set APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS
-            options.APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS = configuration.GetValue<string>("APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS").AsBool() ?? false;
-
-            // log the parameters
-            Console.WriteLine("ConfigOptions:");
-            Console.WriteLine($"  APPCONFIG_URL = \"{options.APPCONFIG_URL}\"");
-            Console.WriteLine($"  APPCONFIG_KEYS = \"{string.Join(", ", options.APPCONFIG_KEYS)}\"");
-            Console.WriteLine($"  APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS = \"{options.APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS}\"");
-        });
-
         // add the config object
         services.AddSingleton<IConfigFactory<I>, ConfigFactory<I, T>>();
-
-        // add AzureAppConfig as a service
-        services.TryAddSingleton<AzureAppConfig>();
 
         // add the startup services
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, OptionsStartup>());
@@ -102,10 +116,13 @@ public static class Ext
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection.</returns>
-    public static IServiceCollection AddDefaultAzureCredential(this IServiceCollection services, bool logParams = true)
+    public static IServiceCollection AddDefaultAzureCredential(this IServiceCollection services)
     {
-        services.AddOptions<DefaultAzureCredentialOptions>().Configure<IConfiguration>((options, configuration) =>
+        services.AddSingleton<DefaultAzureCredentialOptions>(provider =>
         {
+            var configuration = provider.GetRequiredService<IConfiguration>();
+            var options = new DefaultAzureCredentialOptions();
+
             // get the variables
             var INCLUDE_CREDENTIAL_TYPES = configuration.GetValue<string>("INCLUDE_CREDENTIAL_TYPES").AsArray();
             var ASPNETCORE_ENVIRONMENT = configuration.GetValue<string>("ASPNETCORE_ENVIRONMENT");
@@ -117,13 +134,10 @@ public static class Ext
                     : ["env", "mi"];
 
             // log
-            if (logParams)
-            {
-                Console.WriteLine("DefaultAzureCredentialOptions:");
-                Console.WriteLine($"  ASPNETCORE_ENVIRONMENT = \"{ASPNETCORE_ENVIRONMENT}\"");
-                Console.WriteLine($"  INCLUDE_CREDENTIAL_TYPES = \"{string.Join(", ", include)}\"");
-                Console.WriteLine($"  AZURE_CLIENT_ID = \"{AZURE_CLIENT_ID}\"");
-            }
+            Console.WriteLine("DefaultAzureCredentialOptions:");
+            Console.WriteLine($"  ASPNETCORE_ENVIRONMENT = \"{ASPNETCORE_ENVIRONMENT}\"");
+            Console.WriteLine($"  INCLUDE_CREDENTIAL_TYPES = \"{string.Join(", ", include)}\"");
+            Console.WriteLine($"  AZURE_CLIENT_ID = \"{AZURE_CLIENT_ID}\"");
 
             // set the options
             options.ManagedIdentityClientId = AZURE_CLIENT_ID;
@@ -137,6 +151,8 @@ public static class Ext
             options.ExcludeAzureDeveloperCliCredential = !include.Contains("azd");
             options.ExcludeAzurePowerShellCredential = !include.Contains("ps");
             options.ExcludeWorkloadIdentityCredential = !include.Contains("workload");
+
+            return options;
         });
 
         // add as a singleton
@@ -156,30 +172,29 @@ public static class Ext
     /// Add the single line console logger to the service collection.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="logParams">Whether to log the logging parameters.</param>
     /// <returns>The service collection.</returns>
-    public static IServiceCollection AddSingleLineConsoleLogger(this IServiceCollection services, bool logParams = true)
+    public static IServiceCollection AddSingleLineConsoleLogger(this IServiceCollection services)
     {
         // add the options
-        services.AddOptions<SingleLineConsoleLoggerOptions>().Configure<IConfiguration>((options, configuration) =>
+        services.AddSingleton<SingleLineConsoleLoggerOptions>(provider =>
         {
+            var configuration = provider.GetRequiredService<IConfiguration>();
+            var options = new SingleLineConsoleLoggerOptions();
+
+            var logLevel = configuration.GetValue<string>("LOG_LEVEL").AsEnum<LogLevel>() ?? LogLevel.Information;
             options.DISABLE_COLORS = configuration.GetValue<string>("DISABLE_COLORS").AsBool() ?? false;
-            if (logParams)
-            {
-                Console.WriteLine("SingleLineConsoleLoggerOptions:");
-                Console.WriteLine($"  DISABLE_COLORS = \"{options.DISABLE_COLORS}\"");
-            }
+
+            Console.WriteLine("SingleLineConsoleLoggerOptions:");
+            Console.WriteLine($"  LOG_LEVEL = \"{logLevel}\"");
+            Console.WriteLine($"  DISABLE_COLORS = \"{options.DISABLE_COLORS}\"");
+
+            return options;
         });
 
         // add the logger filter options
         services.AddOptions<LoggerFilterOptions>().Configure<IConfiguration>((options, configuration) =>
         {
             options.MinLevel = configuration.GetValue<string>("LOG_LEVEL").AsEnum<LogLevel>() ?? LogLevel.Information;
-            if (logParams)
-            {
-                Console.WriteLine("LoggerFilterOptions:");
-                Console.WriteLine($"  LOG_LEVEL = \"{options.MinLevel}\"");
-            }
         });
 
         // add the logger

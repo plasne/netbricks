@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Azure.Identity;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace NetBricks;
@@ -9,25 +10,15 @@ namespace NetBricks;
 public class OptionsStartup : IHostedService
 {
     public OptionsStartup(
-        IOptions<SingleLineConsoleLoggerOptions> singleLineConsoleLoggerOptions,
-        IOptions<DefaultAzureCredentialOptions> defaultAzureCredentialOptions,
-        IOptions<ConfigOptions> configOptions)
+        SingleLineConsoleLoggerOptions? singleLineConsoleLoggerOptions = null,
+        DefaultAzureCredentialOptions? defaultAzureCredentialOptions = null,
+        AzureAppConfigOptions? configOptions = null)
     {
-        this.singleLineConsoleLoggerOptions = singleLineConsoleLoggerOptions;
-        this.defaultAzureCredentialOptions = defaultAzureCredentialOptions;
-        this.configOptions = configOptions;
-
+        // NOTE: we don't use anything from the above, but we need them to be provisioned by the DI container
     }
-
-    private readonly IOptions<SingleLineConsoleLoggerOptions> singleLineConsoleLoggerOptions;
-    private readonly IOptions<DefaultAzureCredentialOptions> defaultAzureCredentialOptions;
-    private readonly IOptions<ConfigOptions> configOptions;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _ = this.singleLineConsoleLoggerOptions.Value;
-        _ = this.defaultAzureCredentialOptions.Value;
-        _ = this.configOptions.Value;
         return Task.CompletedTask;
     }
 

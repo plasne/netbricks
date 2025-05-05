@@ -4,6 +4,5 @@ namespace NetBricks;
 
 public class SingleLineConsoleLoggerOptions
 {
-    public required LogLevel LOG_LEVEL { get; set; }
-    public required bool DISABLE_COLORS { get; set; }
+    public bool DISABLE_COLORS { get; set; }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Azure.Core;
 using Azure.Identity;
@@ -13,14 +14,14 @@ namespace NetBricks;
 
 public class AzureAppConfig
 {
-    public AzureAppConfig(IOptions<ConfigOptions> options, IHttpClientFactory? httpClientFactory = null, DefaultAzureCredential? defaultAzureCredential = null)
+    public AzureAppConfig(AzureAppConfigOptions options, IHttpClientFactory? httpClientFactory = null, DefaultAzureCredential? defaultAzureCredential = null)
     {
-        this.options = options.Value;
+        this.options = options;
         this.httpClientFactory = httpClientFactory;
         this.defaultAzureCredential = defaultAzureCredential;
     }
 
-    private readonly ConfigOptions options;
+    private readonly AzureAppConfigOptions options;
     private readonly IHttpClientFactory? httpClientFactory;
     private readonly DefaultAzureCredential? defaultAzureCredential;
 
@@ -41,7 +42,7 @@ public class AzureAppConfig
         public string? uri = null;
     }
 
-    internal async Task LoadAsync()
+    internal async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         // exit if there is nothing requested
         if (this.options.APPCONFIG_KEYS is null || this.options.APPCONFIG_KEYS.Length < 1) return;
@@ -60,7 +61,7 @@ public class AzureAppConfig
 
         // get an access token
         var tokenRequestContext = new TokenRequestContext([$"{this.options.APPCONFIG_URL}/.default"]);
-        var tokenResponse = await defaultAzureCredential.GetTokenAsync(tokenRequestContext);
+        var tokenResponse = await defaultAzureCredential.GetTokenAsync(tokenRequestContext, cancellationToken);
         var accessToken = tokenResponse.Token;
 
         // create the HTTP client
@@ -76,10 +77,10 @@ public class AzureAppConfig
                 Method = HttpMethod.Get
             };
             request.Headers.Add("Authorization", $"Bearer {accessToken}");
-            using (var response = await httpClient.SendAsync(request))
+            using (var response = await httpClient.SendAsync(request, cancellationToken))
             {
                 // evaluate the response
-                var raw = await response.Content.ReadAsStringAsync();
+                var raw = await response.Content.ReadAsStringAsync(cancellationToken);
                 if ((int)response.StatusCode == 401 || (int)response.StatusCode == 403)
                 {
                     throw new Exception($"The identity is not authorized to get key/value pairs from the AppConfig \"{this.options.APPCONFIG_URL}\"; make sure this is the right instance and that you have granted rights to the Managed Identity or Service Principal. If running locally, make sure you have run an \"az login\" with the correct account and subscription.");

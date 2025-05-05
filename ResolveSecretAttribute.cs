@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Azure.Core;
 using Azure.Identity;
@@ -66,7 +67,8 @@ internal static class ResolveSecret
     internal static async Task ApplyAsync<T>(
         T instance,
         IHttpClientFactory? httpClientFactory = null,
-        DefaultAzureCredential? defaultAzureCredential = null)
+        DefaultAzureCredential? defaultAzureCredential = null,
+        CancellationToken cancellationToken = default)
         where T : class
     {
         if (instance == null)
@@ -103,7 +105,7 @@ internal static class ResolveSecret
 
             // get an access token
             var tokenRequestContext = new TokenRequestContext([$"https://vault.azure.net/.default"]);
-            var tokenResponse = await defaultAzureCredential!.GetTokenAsync(tokenRequestContext);
+            var tokenResponse = await defaultAzureCredential!.GetTokenAsync(tokenRequestContext, cancellationToken);
             var accessToken = tokenResponse.Token;
 
             // create the HTTP client
@@ -117,8 +119,8 @@ internal static class ResolveSecret
             })
             {
                 request.Headers.Add("Authorization", $"Bearer {accessToken}");
-                using var response = await httpClient.SendAsync(request);
-                var raw = await response.Content.ReadAsStringAsync();
+                using var response = await httpClient.SendAsync(request, cancellationToken);
+                var raw = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
                     ResolveSecretAttribute.SetError(typeof(T), property.Name, $"Key vault request failed: {response.StatusCode} - {raw}");

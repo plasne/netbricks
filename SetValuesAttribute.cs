@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
@@ -39,7 +40,8 @@ public class SetValuesAttribute : Attribute
 
 internal static class SetValues
 {
-    internal static async Task ApplyAsync<T>(T instance) where T : class
+    internal static async Task ApplyAsync<T>(T instance, CancellationToken cancellationToken = default)
+        where T : class
     {
         if (instance == null)
             throw new ArgumentNullException(nameof(instance));
@@ -52,7 +54,11 @@ internal static class SetValues
             var task = method.Invoke(instance, null) as Task;
             if (task is not null)
             {
-                await task.ConfigureAwait(false);
+                await Task.WhenAny(
+                    task,
+                    Task.Delay(Timeout.Infinite, cancellationToken)
+                ).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
         }
     }

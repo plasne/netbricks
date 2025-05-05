@@ -17,7 +17,7 @@ public class ConfigStartup<I> : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _ = await this.configFactory.GetAsync();
+        _ = await this.configFactory.GetAsync(cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
