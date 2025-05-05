@@ -11,7 +11,7 @@ public interface IConfigFactory<I>
     where I : class
 {
     /// <summary>
-    /// Gets the configuration object, creating and configuring it if necessary.
+    /// Gets the configuration object while resolving all settings from Azure AppConfig, Key Vault, etc.
     /// </summary>
     /// <param name="cancellationToken">A cancellation token to cancel the operation</param>
     /// <returns>A configured instance of the configuration object</returns>

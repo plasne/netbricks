@@ -27,6 +27,13 @@ public static class Ext
     // NOTE: these do not use the Options pattern because all consumers are not guaranteed to get the same Options object (ex. race
     // conditions, different scopes, etc.)
 
+    /// <summary>
+    /// Adds the Azure App Configuration service to the service collection.
+    /// This method configures Azure App Configuration integration so that settings can be loaded from Azure App Configuration.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="logMethod">The method to use for logging.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddAzureAppConfig(this IServiceCollection services, LogMethod logMethod = LogMethod.ILogger)
     {
         // check if already added
@@ -96,6 +103,7 @@ public static class Ext
     /// </summary>
     /// <typeparam name="T">The type of configuration class to register.</typeparam>
     /// <param name="services">The service collection.</param>
+    /// <param name="logMethod">The method to use for logging.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddConfig<T>(this IServiceCollection services, LogMethod logMethod = LogMethod.ILogger)
         where T : class
@@ -116,6 +124,7 @@ public static class Ext
     /// <typeparam name="I">The interface type to register.</typeparam>
     /// <typeparam name="T">The implementation type to instantiate and configure.</typeparam>
     /// <param name="services">The service collection.</param>
+    /// <param name="logMethod">The method to use for logging.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddConfig<I, T>(this IServiceCollection services, LogMethod logMethod = LogMethod.ILogger)
         where I : class
@@ -151,6 +160,7 @@ public static class Ext
     /// Add the default Azure credential to the service collection.
     /// </summary>
     /// <param name="services">The service collection.</param>
+    /// <param name="logMethod">The method to use for logging.</param>
     /// <returns>The service collection.</returns>
     public static IServiceCollection AddDefaultAzureCredential(this IServiceCollection services, LogMethod logMethod = LogMethod.ILogger)
     {
@@ -227,6 +237,7 @@ public static class Ext
     /// Add the single line console logger to the service collection.
     /// </summary>
     /// <param name="services">The service collection.</param>
+    /// <param name="logMethod">The method to use for logging.</param>
     /// <returns>The service collection.</returns>
     public static IServiceCollection AddSingleLineConsoleLogger(this IServiceCollection services, LogMethod logMethod = LogMethod.ILogger)
     {
@@ -244,20 +255,20 @@ public static class Ext
 
                 // set the options
                 var logLevel = configuration.GetValue<string>("LOG_LEVEL").AsEnum<LogLevel>() ?? LogLevel.Information;
-                options.DISABLE_COLORS = configuration.GetValue<string>("DISABLE_COLORS").AsBool() ?? false;
+                options.LOG_WITH_COLORS = configuration.GetValue<string>("LOG_WITH_COLORS").AsBool() ?? true;
 
                 // log the parameters
                 if (logMethod == LogMethod.ILogger)
                 {
                     var logger = provider.GetRequiredService<ILogger<SingleLineConsoleLoggerOptions>>();
                     logger.LogInformation($"LOG_LEVEL = \"{logLevel}\"");
-                    logger.LogInformation($"DISABLE_COLORS = \"{options.DISABLE_COLORS}\"");
+                    logger.LogInformation($"LOG_WITH_COLORS = \"{options.LOG_WITH_COLORS}\"");
                 }
                 else
                 {
                     Console.WriteLine("SingleLineConsoleLoggerOptions:");
                     Console.WriteLine($"  LOG_LEVEL = \"{logLevel}\"");
-                    Console.WriteLine($"  DISABLE_COLORS = \"{options.DISABLE_COLORS}\"");
+                    Console.WriteLine($"  LOG_WITH_COLORS = \"{options.LOG_WITH_COLORS}\"");
                 }
 
                 return options;

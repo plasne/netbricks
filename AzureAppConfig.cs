@@ -33,8 +33,8 @@ internal class AzureAppConfig
     private class AppConfigItem
     {
         public string? content_type = null;
-        public required string key;
-        public required string value;
+        public string? key = null;
+        public string? value = null;
     }
 
     private class KeyVaultRef
@@ -98,14 +98,18 @@ internal class AzureAppConfig
                     {
                         var key = this.options.APPCONFIG_SHOULD_USE_FULLY_QUALIFIED_KEYS
                             ? item.key
-                            : item.key.Split(":").Last();
-                        key = key.ToUpper();
+                            : item.key?.Split(":").Last();
+                        key = key?.ToUpper();
                         var val = item.value;
-                        if (item.content_type != null && item.content_type.Contains("vnd.microsoft.appconfig.keyvaultref", StringComparison.OrdinalIgnoreCase))
+                        if (!string.IsNullOrEmpty(item.content_type)
+                            && item.content_type.Contains("vnd.microsoft.appconfig.keyvaultref", StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrEmpty(item.value))
                         {
                             val = JsonConvert.DeserializeObject<KeyVaultRef>(item.value)?.uri;
                         }
-                        if (!string.IsNullOrEmpty(val) && Environment.GetEnvironmentVariable(key) is null)
+                        if (!string.IsNullOrEmpty(key)
+                            && !string.IsNullOrEmpty(val)
+                            && Environment.GetEnvironmentVariable(key) is null)
                         {
                             Environment.SetEnvironmentVariable(key, val);
                         }

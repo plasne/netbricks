@@ -32,10 +32,27 @@ public enum LogConfigMode
     Masked
 }
 
+/// <summary>
+/// Attribute to control logging of configuration properties.
+/// </summary>
+/// <remarks>
+/// This attribute can be applied to classes and properties to control when their values are logged.
+/// The logging behavior is determined by the <see cref="LogConfigMode"/> enum.
+/// The attribute can be applied to classes and properties.
+/// If applied to a class, it will apply to all properties of that class.
+/// If applied to a property, it will override the class-level attribute.
+/// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Property, AllowMultiple = false)]
 public class LogConfigAttribute : Attribute
 {
+    /// <summary>
+    /// Gets or sets the header to be used when logging the property value.
+    /// </summary>
     public string? Header { get; set; }
+
+    /// <summary>
+    /// Gets or sets the logging mode for the property.
+    /// </summary>
     public LogConfigMode Mode { get; set; } = LogConfigMode.Always;
 
     public LogConfigAttribute(string? header = null, LogConfigMode mode = LogConfigMode.Always)

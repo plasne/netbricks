@@ -33,3 +33,11 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 ```
+
+## Configuration
+
+The following configuration options are available:
+
+- `LOG_LEVEL`: The minimum log level to log. Default is `Information`. These are the same as the Microsoft.Extensions.Logging.LogLevel enum values.
+
+- `LOG_WITH_COLORS`: If set to `true`, the logger will use colors. Default is `true`.

@@ -18,7 +18,7 @@ I have a number of tenants I believe all configuration management solutions shou
   - Configuration values can interact with one another. For instance, if one value is true, other values may be required. These more complex validations should be enforced.
   - Configuration should be documented extensively and clearly.
 
-## Basic Usage
+## Usage
 
 To do basic configuration management, create a class like this:
 
@@ -26,7 +26,7 @@ To do basic configuration management, create a class like this:
 using NetBricks;
 using System.ComponentModel.DataAnnotations;
 
-[WriteToConsole]
+[LogConfig]
 public class Config : IConfig
 {
     [SetValue("NAME")]
@@ -137,26 +137,26 @@ If CONCURRENCY was set to something greater than 0 by the SetValueAttribute, it 
 
 SetValuesAttribute has an order property that can be used to control the order in which the methods are called. The default is 0. The lower the number, the earlier it will be called. This is useful if you have multiple methods that need to be called in a specific order (ex. `[SetValues(order: 0)]`, `[SetValues(order: 1)]`, etc.).
 
-## WriteToConsoleAttribute
+## LogConfigAttribute
 
-The `WriteToConsole` attribute can be applied to a Class or Property. When applied to a Class, it will write the entire class to the console. When applied to a Property, it will write just that property to the console. The settings of a Property override the settings of the Class.
+The `LogConfig` attribute can be applied to a Class or Property. When applied to a Class, it will write the entire class to the ILogger (default) or console. When applied to a Property, it will write just that property. The settings of a Property override the settings of the Class.
 
-There are modes that can be used to control how the configuration is written to the console. The modes are:
+There are modes that can be used to control what and how the configuration is written. The modes are:
 
-- `Always`: Write the name of the property and the value to the console. This is the default.
-- `Never`: Do not write to the console.
-- `IfNotEmpty`: Write the name of the property and the value to the console provided the value is not empty or null.
-- `Masked` - Write the name of the property to the console, the value will be `**MASKED**`.
+- `Always`: Write the name of the property and the value. This is the default.
+- `Never`: Do not write the name and value.
+- `IfNotEmpty`: Write the name of the property and the value to the ILogger or console provided the value is not empty or null.
+- `Masked` - Write the name of the property, the value will be `**MASKED**`.
 
 For example, to print all the values except a secret:
 
 ```csharp
-[WriteToConsole(WriteToConsoleMode.Always)]
+[LogConfig(LogConfigMode.Always)]
 public class Config
 {
     public string? NAME { get; set; }
 
-    [WriteToConsole(WriteToConsoleMode.Masked)]
+    [LogConfig(LogConfigMode.Masked)]
     public string? SECRET { get; set; }
 }
 ```
@@ -166,10 +166,10 @@ NAME = "Peter"
 SECRET = "**MASKED**"
 ```
 
-You can also apply a header to the class, which will be printed to the console before the configuration is printed and indent the properties. This makes it easier to read:
+You can also apply a header to the class, which will be printed before the configuration is printed and indent the properties. This makes it easier to read:
 
 ```csharp
-[WriteToConsole("Application:")]
+[LogConfig("Application:")]
 public class Config
 { }
 ```
@@ -184,7 +184,7 @@ Application:
 You can even add headers to properties:
 
 ```csharp
-[WriteToConsole("->", "FAVORITE_COLOR")]
+[LogConfig("->", "FAVORITE_COLOR")]
 public string? FAVORITE_COLOR { get; set; }
 ```
 
@@ -204,7 +204,7 @@ For example, SECRET might be set to a URL like <https://myvault.vault.azure.net/
 ```csharp
 [SetValue("SECRET")]
 [ResolveSecret]
-[WriteToConsole(WriteToConsoleMode.Masked)]
+[LogConfig(LogConfigMode.Masked)]
 public string? SECRET { get; set; }
 ```
 
@@ -261,7 +261,3 @@ public class Config : IValidatableObject
 ## Comparison
 
 I have evaluated a number of configuration management solutions and have found that most of them do not meet all of these requirements or don't cover the same scope as this solution.
-
-## Coverage
-
-- Test App Configuration

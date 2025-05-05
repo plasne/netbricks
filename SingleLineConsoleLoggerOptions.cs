@@ -4,5 +4,5 @@ namespace NetBricks;
 
 internal class SingleLineConsoleLoggerOptions
 {
-    internal bool DISABLE_COLORS { get; set; }
+    internal bool LOG_WITH_COLORS { get; set; }
 }

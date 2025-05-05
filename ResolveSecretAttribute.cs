@@ -19,10 +19,6 @@ namespace NetBricks;
 /// This attribute is applied to string properties that contain Azure Key Vault URLs.
 /// During configuration setup, these URLs will be replaced with the actual secret values.
 /// </summary>
-/// <remarks>
-/// Currently only supports string properties containing direct Key Vault URLs.
-/// Future enhancements may include supporting other property types and batch operations.
-/// </remarks>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
 public class ResolveSecretAttribute : ValidationAttribute
 {

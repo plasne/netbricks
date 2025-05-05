@@ -36,3 +36,5 @@ Ideally, set only the specific method you wish to use. For instance, a deployed 
 ```dotenv
 INCLUDE_CREDENTIALS_TYPE=mi
 ```
+
+When using Managed Identity, you will often need to set the `AZURE_CLIENT_ID` environment variable to the client ID of the Managed Identity.

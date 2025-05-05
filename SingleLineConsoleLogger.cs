@@ -62,7 +62,7 @@ internal class SingleLineConsoleLogger : ILogger, IDisposable
     internal SingleLineConsoleLogger(string name, SingleLineConsoleLoggerOptions options)
     {
         this.Name = name;
-        this.DisableColors = options.DISABLE_COLORS;
+        this.Options = options;
 
         // create an unbounded channel for the log messages
         LogChannel = System.Threading.Channels.Channel.CreateUnbounded<string>(new UnboundedChannelOptions
@@ -90,7 +90,7 @@ internal class SingleLineConsoleLogger : ILogger, IDisposable
     }
 
     private string Name { get; }
-    private bool DisableColors { get; }
+    private SingleLineConsoleLoggerOptions Options { get; }
     private Channel<string> LogChannel { get; }
     private CancellationTokenSource CancellationTokenSource { get; } = new CancellationTokenSource();
     private CancellationToken CancellationToken => CancellationTokenSource.Token;
@@ -129,11 +129,11 @@ internal class SingleLineConsoleLogger : ILogger, IDisposable
             // write the message
             var sb = new StringBuilder();
             var logLevelColors = GetLogLevelConsoleColors(logLevel);
-            if (!DisableColors && logLevelColors.Foreground != null) sb.Append(logLevelColors.Foreground);
-            if (!DisableColors && logLevelColors.Background != null) sb.Append(logLevelColors.Background);
+            if (this.Options.LOG_WITH_COLORS && logLevelColors.Foreground is not null) sb.Append(logLevelColors.Foreground);
+            if (this.Options.LOG_WITH_COLORS && logLevelColors.Background is not null) sb.Append(logLevelColors.Background);
             var logLevelString = GetLogLevelString(logLevel);
             sb.Append(logLevelString);
-            if (!DisableColors) sb.Append("\u001b[0m"); // reset
+            if (this.Options.LOG_WITH_COLORS) sb.Append("\u001b[0m"); // reset
             sb.Append($" {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} [src:{Name}] ");
             sb.Append(message);
 
@@ -178,7 +178,7 @@ internal class SingleLineConsoleLogger : ILogger, IDisposable
 
     private ConsoleColors GetLogLevelConsoleColors(LogLevel logLevel)
     {
-        if (DisableColors) return new ConsoleColors(null, null);
+        if (!this.Options.LOG_WITH_COLORS) return new ConsoleColors(null, null);
 
         // We must explicitly set the background color if we are setting the foreground color,
         // since just setting one can look bad on the users console.
