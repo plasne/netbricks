@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace NetBricks;
 
-public class ConfigStartup<I> : IHostedService
+internal class ConfigStartup<I> : IHostedService
     where I : class
 {
     public ConfigStartup(IConfigFactory<I> configFactory, LogMethod logMethod)

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace NetBricks;
 
-public class ConfigFactory<I, T> : IConfigFactory<I>
+internal class ConfigFactory<I, T> : IConfigFactory<I>
     where I : class
     where T : class, I
 {

@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace NetBricks;
 
-public class SingleLineConsoleLoggerOptions
+internal class SingleLineConsoleLoggerOptions
 {
-    public bool DISABLE_COLORS { get; set; }
+    internal bool DISABLE_COLORS { get; set; }
 }

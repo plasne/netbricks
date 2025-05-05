@@ -1,6 +1,6 @@
 namespace NetBricks;
 
-public class ConfigOptions
+internal class ConfigOptions
 {
-    public LogMethod LogMethod { get; set; }
+    internal LogMethod LogMethod { get; set; }
 }

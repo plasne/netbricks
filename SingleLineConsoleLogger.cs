@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 
 namespace NetBricks;
 
-public class SingleLineConsoleLoggerProvider : ILoggerProvider
+internal class SingleLineConsoleLoggerProvider : ILoggerProvider
 {
     public SingleLineConsoleLoggerProvider(IOptions<SingleLineConsoleLoggerOptions> options)
     {
@@ -57,9 +57,9 @@ public class SingleLineConsoleLoggerProvider : ILoggerProvider
     }
 }
 
-public class SingleLineConsoleLogger : ILogger, IDisposable
+internal class SingleLineConsoleLogger : ILogger, IDisposable
 {
-    public SingleLineConsoleLogger(string name, SingleLineConsoleLoggerOptions options)
+    internal SingleLineConsoleLogger(string name, SingleLineConsoleLoggerOptions options)
     {
         this.Name = name;
         this.DisableColors = options.DISABLE_COLORS;

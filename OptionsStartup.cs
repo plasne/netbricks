@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace NetBricks;
 
-public class OptionsStartup : IHostedService
+internal class OptionsStartup : IHostedService
 {
     public OptionsStartup(
         SingleLineConsoleLoggerOptions? singleLineConsoleLoggerOptions = null,

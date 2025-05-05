@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace NetBricks;
 
-public class AzureAppConfigStartup : IHostedService
+internal class AzureAppConfigStartup : IHostedService
 {
     public AzureAppConfigStartup(AzureAppConfigOptions options, AzureAppConfig config)
     {
