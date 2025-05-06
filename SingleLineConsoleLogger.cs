@@ -3,105 +3,115 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace NetBricks;
-public static class AddSingleLineConsoleLoggerConfiguration
+
+internal class SingleLineConsoleLoggerProvider : ILoggerProvider
 {
-    public static void AddSingleLineConsoleLogger(this IServiceCollection services, bool logParams = true)
+    public SingleLineConsoleLoggerProvider(IOptions<SingleLineConsoleLoggerOptions> options)
     {
-        // log the logger variables
-        if (logParams)
-        {
-            Console.WriteLine($"LOG_LEVEL = \"{Config.LOG_LEVEL}\"");
-            Console.WriteLine($"DISABLE_COLORS = \"{Config.DISABLE_COLORS}\"");
-        }
-
-        // add the logger
-        services
-            .AddLogging(configure =>
-            {
-                services.TryAddSingleton<ILoggerProvider, SingleLineConsoleLoggerProvider>();
-            })
-            .Configure<LoggerFilterOptions>(options =>
-            {
-                options.MinLevel = Config.LOG_LEVEL;
-            });
+        this.SingleLineConsoleLoggerOptions = options.Value;
     }
-}
 
-
-public class SingleLineConsoleLoggerProvider : ILoggerProvider
-{
+    private SingleLineConsoleLoggerOptions SingleLineConsoleLoggerOptions { get; }
     private ConcurrentDictionary<string, SingleLineConsoleLogger> Loggers = new ConcurrentDictionary<string, SingleLineConsoleLogger>();
+    private bool disposed;
+    private readonly object disposeLock = new object();
 
     public ILogger CreateLogger(string categoryName)
     {
-        return Loggers.GetOrAdd(categoryName, name => new SingleLineConsoleLogger(name, Config.DISABLE_COLORS));
+        return Loggers.GetOrAdd(categoryName, name => new SingleLineConsoleLogger(name, SingleLineConsoleLoggerOptions));
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        lock (this.disposeLock)
+        {
+            if (!this.disposed)
+            {
+                if (disposing)
+                {
+                    foreach (var logger in Loggers)
+                    {
+                        logger.Value.Dispose();
+                    }
+                    Loggers.Clear();
+                }
+
+                // free unmanaged resources (unmanaged objects) and override finalizer
+                // set large fields to null
+                this.disposed = true;
+            }
+        }
     }
 
     public void Dispose()
     {
-        foreach (var logger in Loggers)
-        {
-            logger.Value.Shutdown();
-        }
-        Loggers.Clear();
+        Dispose(true);
+        GC.SuppressFinalize(this);
     }
 }
 
-
-public class SingleLineConsoleLogger : ILogger
+internal class SingleLineConsoleLogger : ILogger, IDisposable
 {
-    public SingleLineConsoleLogger(string name, bool disableColors)
+    internal SingleLineConsoleLogger(string name, SingleLineConsoleLoggerOptions options)
     {
         this.Name = name;
-        this.DisableColors = disableColors;
-        Dispatcher = Task.Run(() =>
+        this.Options = options;
+
+        // create an unbounded channel for the log messages
+        LogChannel = System.Threading.Channels.Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
-            while (!QueueTakeCts.IsCancellationRequested)
+            SingleReader = true, // only one reader will be reading from the channel
+            AllowSynchronousContinuations = false // process continuations asynchronously
+        });
+
+        // start the dispatcher task
+        Dispatcher = Task.Run(async () =>
+        {
+            try
             {
-                try
+                await foreach (var message in LogChannel.Reader.ReadAllAsync(CancellationToken))
                 {
-                    Console.WriteLine(Queue.Take(QueueTakeCts.Token));
+                    Console.WriteLine(message);
                 }
-                catch (OperationCanceledException)
-                {
-                    // let the loop end
-                }
+                IsShutdown.Set();
             }
-            IsShutdown.Set();
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in SingleLineConsoleLogger Dispatcher: {ex}");
+            }
         });
     }
 
     private string Name { get; }
-    private bool DisableColors { get; }
-    private BlockingCollection<string> Queue { get; set; } = new BlockingCollection<string>();
-    private CancellationTokenSource QueueTakeCts { get; set; } = new CancellationTokenSource();
-    private Task Dispatcher { get; set; }
-    private ManualResetEventSlim IsShutdown { get; set; } = new ManualResetEventSlim(false);
+    private SingleLineConsoleLoggerOptions Options { get; }
+    private Channel<string> LogChannel { get; }
+    private CancellationTokenSource CancellationTokenSource { get; } = new CancellationTokenSource();
+    private CancellationToken CancellationToken => CancellationTokenSource.Token;
+    private Task Dispatcher { get; }
+    private ManualResetEventSlim IsShutdown { get; } = new ManualResetEventSlim(false);
 
-    public void Shutdown()
-    {
-        QueueTakeCts.Cancel();
-        IsShutdown.Wait(5000);
-    }
+    private bool disposedValue;
 
-    public IDisposable BeginScope<TState>(TState state)
+    private readonly Lazy<bool> channelErrorReported = new Lazy<bool>(() =>
     {
-        return null;
-    }
+        Console.WriteLine("SingleLineConsoleLogger: Channel is full, writing to console directly.");
+        return true;
+    }, LazyThreadSafetyMode.ExecutionAndPublication);
 
     public bool IsEnabled(LogLevel logLevel)
     {
         return logLevel != LogLevel.None;
     }
 
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-
         if (!IsEnabled(logLevel))
         {
             return;
@@ -116,26 +126,33 @@ public class SingleLineConsoleLogger : ILogger
         var message = formatter(state, exception);
         if (!string.IsNullOrEmpty(message))
         {
-
             // write the message
             var sb = new StringBuilder();
             var logLevelColors = GetLogLevelConsoleColors(logLevel);
-            if (!DisableColors && logLevelColors.Foreground != null) sb.Append(logLevelColors.Foreground);
-            if (!DisableColors && logLevelColors.Background != null) sb.Append(logLevelColors.Background);
+            if (this.Options.LOG_WITH_COLORS && logLevelColors.Foreground is not null) sb.Append(logLevelColors.Foreground);
+            if (this.Options.LOG_WITH_COLORS && logLevelColors.Background is not null) sb.Append(logLevelColors.Background);
             var logLevelString = GetLogLevelString(logLevel);
             sb.Append(logLevelString);
-            if (!DisableColors) sb.Append("\u001b[0m"); // reset
-            sb.Append($" {DateTime.UtcNow.ToString()} [src:{Name}] ");
+            if (this.Options.LOG_WITH_COLORS) sb.Append("\u001b[0m"); // reset
+            sb.Append($" {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} [src:{Name}] ");
             sb.Append(message);
-            Queue.Add(sb.ToString());
+
+            // the channel should only be full if the system is out of memory
+            if (!LogChannel.Writer.TryWrite(sb.ToString()))
+            {
+                _ = this.channelErrorReported.Value;
+                Console.WriteLine(message);
+            }
         }
 
         // write the exception
         if (exception != null)
         {
+            // For exceptions, we want to ensure they appear in the log
+            // We could also put this in the channel, but direct console output
+            // ensures it appears immediately even if the channel is backed up
             Console.WriteLine(exception.ToString());
         }
-
     }
 
     private static string GetLogLevelString(LogLevel logLevel)
@@ -161,7 +178,7 @@ public class SingleLineConsoleLogger : ILogger
 
     private ConsoleColors GetLogLevelConsoleColors(LogLevel logLevel)
     {
-        if (DisableColors) return new ConsoleColors(null, null);
+        if (!this.Options.LOG_WITH_COLORS) return new ConsoleColors(null, null);
 
         // We must explicitly set the background color if we are setting the foreground color,
         // since just setting one can look bad on the users console.
@@ -186,14 +203,50 @@ public class SingleLineConsoleLogger : ILogger
 
     private readonly struct ConsoleColors
     {
-        public ConsoleColors(string foreground, string background)
+        public ConsoleColors(string? foreground, string? background)
         {
             Foreground = foreground;
             Background = background;
         }
 
-        public string Foreground { get; }
+        public string? Foreground { get; }
 
-        public string Background { get; }
+        public string? Background { get; }
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposedValue)
+        {
+            if (disposing)
+            {
+                try
+                {
+                    LogChannel.Writer.Complete();
+                    CancellationTokenSource.Cancel();
+                    IsShutdown.Wait(5000);
+                }
+                finally
+                {
+                    CancellationTokenSource.Dispose();
+                    IsShutdown.Dispose();
+                }
+            }
+
+            // free unmanaged resources (unmanaged objects) and override finalizer
+            // set large fields to null
+            this.disposedValue = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+    {
+        return null;
     }
 }
