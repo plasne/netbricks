@@ -9,6 +9,8 @@ This capability is designed to read settings from Azure App Configuration and ma
 You can add it to the service collection like this:
 
 ```csharp
+services.AddHttpClient(); // pre-requisite
+services.AddDefaultAzureCredential(); // pre-requisite
 services.AddAzureAppConfig();
 ```
 
