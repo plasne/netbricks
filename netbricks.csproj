@@ -8,6 +8,7 @@
     <Authors>Peter Lasne</Authors>
     <Company>Microsoft</Company>
     <PackageDescription>Commonly used tooling for dotnetcore, including configuration management, logging, etc.</PackageDescription>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/plasne/netbricks</RepositoryUrl>
     <IsPackable>true</IsPackable>
@@ -20,5 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.4" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>
