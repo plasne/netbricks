@@ -220,7 +220,7 @@ public static class Ext
             // add as a singleton
             services.AddSingleton<DefaultAzureCredential>(provider =>
             {
-                var options = provider.GetRequiredService<IOptions<DefaultAzureCredentialOptions>>().Value;
+                var options = provider.GetRequiredService<DefaultAzureCredentialOptions>();
                 return new DefaultAzureCredential(options);
             });
 
@@ -260,9 +260,7 @@ public static class Ext
                 // log the parameters
                 if (logMethod == LogMethod.ILogger)
                 {
-                    var logger = provider.GetRequiredService<ILogger<SingleLineConsoleLoggerOptions>>();
-                    logger.LogInformation($"LOG_LEVEL = \"{logLevel}\"");
-                    logger.LogInformation($"LOG_WITH_COLORS = \"{options.LOG_WITH_COLORS}\"");
+                    options.LOG_TO_CONSOLE = true;
                 }
                 else
                 {

@@ -13,9 +13,9 @@ namespace NetBricks;
 
 internal class SingleLineConsoleLoggerProvider : ILoggerProvider
 {
-    public SingleLineConsoleLoggerProvider(IOptions<SingleLineConsoleLoggerOptions> options)
+    public SingleLineConsoleLoggerProvider(SingleLineConsoleLoggerOptions options)
     {
-        this.SingleLineConsoleLoggerOptions = options.Value;
+        this.SingleLineConsoleLoggerOptions = options;
     }
 
     private SingleLineConsoleLoggerOptions SingleLineConsoleLoggerOptions { get; }

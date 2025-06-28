@@ -10,11 +10,20 @@ namespace NetBricks;
 internal class OptionsStartup : IHostedService
 {
     public OptionsStartup(
+        ILogger<OptionsStartup> logger,
+        IOptionsMonitor<LoggerFilterOptions> loggerFilterOptionsMonitor,
         SingleLineConsoleLoggerOptions? singleLineConsoleLoggerOptions = null,
         DefaultAzureCredentialOptions? defaultAzureCredentialOptions = null,
         AzureAppConfigOptions? configOptions = null)
     {
-        // NOTE: we don't use anything from the above, but we need them to be provisioned by the DI container
+        if (singleLineConsoleLoggerOptions is not null && singleLineConsoleLoggerOptions.LOG_TO_CONSOLE)
+        {
+            if (loggerFilterOptionsMonitor.CurrentValue is not null)
+            {
+                logger.LogInformation($"LOG_LEVEL = \"{loggerFilterOptionsMonitor.CurrentValue.MinLevel}\"");
+            }
+            logger.LogInformation($"LOG_WITH_COLORS = \"{singleLineConsoleLoggerOptions.LOG_WITH_COLORS}\"");
+        }
     }
 
     public Task StartAsync(CancellationToken cancellationToken)

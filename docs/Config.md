@@ -258,6 +258,15 @@ public class Config : IValidatableObject
 }
 ```
 
+## Retrieve the Configuration
+
+To retrieve the configuration, you can get `IConfigFactory<IConfig>` (where `IConfig` is the type you registered with `AddConfig()`) from the service collection in a constructor, method, or using `IServiceProvider` as normal. Calling `GetAsync()` will return the configuration object, which will have all the properties set according to the configuration sources (environment variables, Azure App Configuration, etc.) and any transformations or validations applied.
+
+```csharp
+var configFactory = serviceProvider.GetRequiredService<IConfigFactory<IConfig>>();
+var config = await configFactory.GetAsync();
+```
+
 ## Comparison
 
 I have evaluated a number of configuration management solutions and have found that most of them do not meet all of these requirements or don't cover the same scope as this solution.
