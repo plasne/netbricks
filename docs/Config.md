@@ -1,5 +1,7 @@
 # Configuration Management
 
+If you are trying to implement Netbricks configuration management via an AI agent, there is documentation available in the [Config-for-AI.md](./Config-for-AI.md) doc.
+
 ## Why?
 
 I have a number of tenants I believe all configuration management solutions should have. I have tried to implement them in a way that is easy to use and understand.
