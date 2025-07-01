@@ -77,7 +77,7 @@ internal static class SetValue
         var properties = typeof(T).GetProperties();
         foreach (var property in properties)
         {
-            // Check if the property has the GetValue attribute
+            // Check if the property has the SetValue attribute
             var attribute = Attribute.GetCustomAttribute(property, typeof(SetValueAttribute)) as SetValueAttribute;
             if (attribute is null)
                 continue;
@@ -98,7 +98,7 @@ internal static class SetValue
                 var nullableUnderlyingType = Nullable.GetUnderlyingType(targetType);
                 var effectiveType = nullableUnderlyingType ?? targetType;
 
-                // Special handling for enums
+                // Supported data types
                 if (effectiveType == typeof(string))
                 {
                     var convertedValue = value.AsString(() => null);

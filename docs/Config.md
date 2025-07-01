@@ -1,5 +1,7 @@
 # Configuration Management
 
+If you are trying to implement Netbricks configuration management via an AI agent, there is documentation available in the [Config-for-AI.md](./Config-for-AI.md) doc.
+
 ## Why?
 
 I have a number of tenants I believe all configuration management solutions should have. I have tried to implement them in a way that is easy to use and understand.
@@ -256,6 +258,15 @@ public class Config : IValidatableObject
         }
     }
 }
+```
+
+## Retrieve the Configuration
+
+To retrieve the configuration, you can get `IConfigFactory<IConfig>` (where `IConfig` is the type you registered with `AddConfig()`) from the service collection in a constructor, method, or using `IServiceProvider` as normal. Calling `GetAsync()` will return the configuration object, which will have all the properties set according to the configuration sources (environment variables, Azure App Configuration, etc.) and any transformations or validations applied.
+
+```csharp
+var configFactory = serviceProvider.GetRequiredService<IConfigFactory<IConfig>>();
+var config = await configFactory.GetAsync();
 ```
 
 ## Comparison
