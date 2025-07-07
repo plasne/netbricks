@@ -87,6 +87,47 @@
   - Setting a variable based on other variables
   - Validation spanning multiple variables
 
+- Kestrel startup with a custom port could follow a pattern like this:
+
+  ```csharp
+  builder.Services.AddSingleton<IConfigureOptions<KestrelServerOptions>, KestrelConfigurator>();
+
+  public class KestrelConfigurator(IConfigFactory<IConfig> configFactory) : IConfigureOptions<KestrelServerOptions>
+  {
+      public void Configure(KestrelServerOptions options)
+      {
+          var config = configFactory.GetAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+          options.ListenLocalhost(config.PORT ?? 80);
+      }
+  }
+  ```
+
+- If using EF Core with database migrations, you could follow a pattern like this:
+
+```csharp
+builder.Services.AddHostedService<DatabaseMigrationService>();
+
+public class DatabaseMigrationService(
+    IServiceProvider serviceProvider,
+    IConfigFactory<Config> configFactory,
+    ILogger<DatabaseMigrationService> logger,
+    IHostEnvironment environment
+) : IHostedService
+{
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        var config = await configFactory.GetAsync();
+        using var scope = serviceProvider.CreateScope();
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        optionsBuilder.UseSqlServer(config.SQL_CONNECTION_STRING);
+        using var dbContext = new ApplicationDbContext(optionsBuilder.Options);
+        await dbContext.Database.MigrateAsync(cancellationToken);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+```
+
 ## DO NOT
 
 - Do not implement a health check for configuration management. Instead, ensure that the configuration is validated at startup.
@@ -94,3 +135,5 @@
 - Do not attempt to get the configuration object directly from the service provider without using the `IConfigFactory<T>` interface.
 
 - Do not attempt to do a conversion of a datatype manually if that is already supported by `[SetValue]`.
+
+- Do not `BuildServiceProvider` in the configuration class.
