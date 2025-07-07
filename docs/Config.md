@@ -269,6 +269,51 @@ var configFactory = serviceProvider.GetRequiredService<IConfigFactory<IConfig>>(
 var config = await configFactory.GetAsync();
 ```
 
+### Using the Configuration for Kestrel
+
+Startup for many components is synchronous, which is unfortunate, but here is a pattern to start Kestrel on a specific port...
+
+```csharp
+builder.Services.AddSingleton<IConfigureOptions<KestrelServerOptions>, KestrelConfigurator>();
+
+public class KestrelConfigurator(IConfigFactory<IConfig> configFactory) : IConfigureOptions<KestrelServerOptions>
+{
+    public void Configure(KestrelServerOptions options)
+    {
+        var config = configFactory.GetAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        options.ListenLocalhost(config.PORT ?? 80);
+    }
+}
+```
+
+### Using the Configuration for EF Core Migrations
+
+Here is a pattern to do EF Core migrations on startup, where the connection string is pulled from the configuration...
+
+```csharp
+builder.Services.AddHostedService<DatabaseMigrationService>();
+
+public class DatabaseMigrationService(
+    IServiceProvider serviceProvider,
+    IConfigFactory<Config> configFactory,
+    ILogger<DatabaseMigrationService> logger,
+    IHostEnvironment environment
+) : IHostedService
+{
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        var config = await configFactory.GetAsync();
+        using var scope = serviceProvider.CreateScope();
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        optionsBuilder.UseSqlServer(config.SQL_CONNECTION_STRING);
+        using var dbContext = new ApplicationDbContext(optionsBuilder.Options);
+        await dbContext.Database.MigrateAsync(cancellationToken);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+```
+
 ## Comparison
 
 I have evaluated a number of configuration management solutions and have found that most of them do not meet all of these requirements or don't cover the same scope as this solution.
