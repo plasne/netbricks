@@ -113,7 +113,7 @@ internal static class LogConfig
 
             // Get the prefix and apply mask
             var prefix = Prefix(logger, classAttribute?.Header, propertyAttribute?.Header);
-            if (mode == LogConfigMode.Masked) stringValue = "**MASKED**";
+            if (mode == LogConfigMode.Masked && !string.IsNullOrEmpty(stringValue)) stringValue = "**MASKED**";
 
             // Log the value
             if (logger is not null)

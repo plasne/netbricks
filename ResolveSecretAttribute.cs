@@ -38,7 +38,7 @@ public class ResolveSecretAttribute : ValidationAttribute
 
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
-        if (value is not string posurl)
+        if (value is not null && value is not string posurl)
         {
             return new ValidationResult("ResolveSecret can only be applied to Strings.");
         }
