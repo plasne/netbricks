@@ -149,14 +149,18 @@ internal static class LogConfig
     {
         if (value == null)
             return null;
-        if (type == typeof(string[]))
-            return string.Join(", ", value as string[] ?? []);
-        if (type == typeof(IEnumerable<string>))
-            return string.Join(", ", value as IEnumerable<string> ?? []);
-        if (type == typeof(IList<string>))
-            return string.Join(", ", value as IList<string> ?? []);
-        if (type == typeof(List<string>))
-            return string.Join(", ", value as List<string> ?? []);
+        if (value is string s)
+            return s;
+        if (value is IEnumerable enumerable)
+        {
+            var items = new List<string>();
+            foreach (var item in enumerable)
+            {
+                if (item != null)
+                    items.Add(item.ToString() ?? string.Empty);
+            }
+            return string.Join(", ", items);
+        }
         return value.ToString();
     }
 }

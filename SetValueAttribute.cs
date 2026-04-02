@@ -139,6 +139,14 @@ internal static class SetValue
                         property.SetValue(instance, convertedValue);
                     }
                 }
+                else if (effectiveType == typeof(decimal))
+                {
+                    var convertedValue = value.AsDecimal(() => null);
+                    if (convertedValue is not null)
+                    {
+                        property.SetValue(instance, convertedValue);
+                    }
+                }
                 else if (effectiveType == typeof(double))
                 {
                     var convertedValue = value.AsDouble(() => null);

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Net.NetworkInformation;
 
 namespace NetBricks;
 
@@ -54,6 +55,19 @@ public static class StringExtensions
     public static float? AsFloat(this string? str, Func<float?>? dflt = null)
     {
         return float.TryParse(str, out float val)
+            ? val
+            : dflt?.Invoke();
+    }
+
+    /// <summary>
+    /// Parse a string as a decimal, returning the default value if the string cannot be parsed.
+    /// </summary>
+    /// <param name="str"></param>
+    /// <param name="dflt"></param>
+    /// <returns></returns>
+    public static decimal? AsDecimal(this string? str, Func<decimal?>? dflt = null)
+    {
+        return decimal.TryParse(str, out decimal val)
             ? val
             : dflt?.Invoke();
     }
