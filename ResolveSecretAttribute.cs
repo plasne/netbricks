@@ -38,9 +38,18 @@ public class ResolveSecretAttribute : ValidationAttribute
 
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
-        if (value is not string posurl)
+        if (!string.IsNullOrEmpty(validationContext.MemberName))
         {
-            return new ValidationResult("ResolveSecret can only be applied to Strings.");
+            var property = validationContext.ObjectType.GetProperty(validationContext.MemberName);
+            if (property is not null && property.PropertyType != typeof(string))
+            {
+                return new ValidationResult("ResolveSecret can only be applied to strings.");
+            }
+        }
+
+        if (value is not null && value is not string)
+        {
+            return new ValidationResult("ResolveSecret can only be applied to strings.");
         }
 
         string? error = GetError(validationContext.ObjectType, validationContext.MemberName);
